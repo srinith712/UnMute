@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+  background-color: #FFF8E7;
+  color: #333333;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar         { width: 6px; height: 6px; }
+::-webkit-scrollbar-track   { background: #FAF3E0; }
+::-webkit-scrollbar-thumb   { background: #CDB4DB; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #7B61FF; }
+
+/* ─── Selection ─────────────────────────────────────────────── */
+::selection { background: rgba(123,97,255,0.18); color: #333; }
+
+/* ─────────────────────────────────────────────────────────────
+   COMPONENT LAYER
+───────────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Cards */
+  .card {
+    @apply bg-white rounded-xl border border-[#E8DCCB] shadow-sm p-5 transition-all duration-200;
+  }
+  .card-hover {
+    @apply card hover:shadow-md cursor-pointer;
+  }
+  .card-sm {
+    @apply bg-white rounded-xl border border-[#E8DCCB] shadow-sm p-4;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-lg font-semibold text-sm text-white
+           bg-purple-500 hover:bg-purple-600
+           active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-400/50;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-lg font-semibold text-sm
+           text-purple-500 bg-purple-100 hover:bg-purple-200
+           active:scale-95 transition-all duration-200;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-lg font-medium text-sm
+           text-gray-600 bg-gray-100 hover:bg-gray-200
+           active:scale-95 transition-all duration-200;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-lg font-medium text-sm
+           text-red-500 bg-red-50 hover:bg-red-100
+           active:scale-95 transition-all duration-200;
+  }
+
+  /* Inputs */
+  .input-field {
+    @apply w-full bg-white border border-[#E8DCCB] rounded-lg
+           px-4 py-3 text-gray-800 font-medium placeholder-gray-400 text-sm
+           focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-300
+           transition-all duration-200;
+  }
+
+  /* Navigation */
+  .nav-link {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl font-medium text-sm
+           text-gray-500 hover:bg-purple-50 hover:text-gray-800 transition-all duration-200;
+  }
+  .nav-link-active {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-sm
+           bg-purple-500 text-white;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+  .badge-peach   { @apply badge bg-orange-100 text-orange-600; }
+  .badge-purple  { @apply badge bg-purple-100 text-purple-600; }
+  .badge-mint    { @apply badge bg-green-100 text-green-600; }
+  .badge-sky     { @apply badge bg-blue-100 text-blue-600; }
+  .badge-orange  { @apply badge bg-orange-100 text-orange-600; }
+  .badge-lavender { @apply badge bg-purple-100 text-purple-500; }
+
+  /* Typography */
+  .page-title {
+    @apply text-2xl font-semibold text-gray-800;
+  }
+  .page-subtitle {
+    @apply text-sm text-gray-500;
+  }
+  .section-title  { @apply text-base font-semibold text-gray-700; }
+  .section-sub    { @apply text-xs text-gray-500; }
+  .label-text     { @apply text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 block; }
+
+  /* XP / Progress bars */
+  .xp-bar-track {
+    @apply h-2.5 rounded-full overflow-hidden bg-gray-100;
+  }
+  .xp-bar-fill {
+    @apply h-full rounded-full bg-purple-400;
+    transition: width 0.8s ease;
+  }
+
+  /* Stat chip */
+  .stat-chip {
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold;
+  }
+}
+
+/* ─── Animations ─────────────────────────────────────────────── */
+@keyframes fadeIn     { from{opacity:0} to{opacity:1} }
+@keyframes slideUp    { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+@keyframes popIn      { from{opacity:0;transform:scale(0.85)} to{opacity:1;transform:scale(1)} }
+@keyframes wiggle     { 0%,100%{transform:rotate(-4deg)} 50%{transform:rotate(4deg)} }
+@keyframes microPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+@keyframes ripple     { 0%{transform:scale(0.85);opacity:1} 100%{transform:scale(2);opacity:0} }
+@keyframes barFill    { from{width:0} }
+@keyframes glowPulse  {
+  0%,100%{box-shadow:0 0 0 0 rgba(255,140,66,0)}
+  50%{box-shadow:0 0 0 8px rgba(255,140,66,0.22)}
+}
+@keyframes floatUp    {
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-8px)}
+}
+
+.animate-fade-in   { animation: fadeIn   0.35s ease forwards; }
+.animate-slide-up  { animation: slideUp  0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.animate-pop-in    { animation: popIn    0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+.animate-wiggle    { animation: wiggle   0.4s ease-in-out; }
+.animate-float     { animation: floatUp  3s ease-in-out infinite; }
+.animate-glow      { animation: glowPulse 2s ease-in-out infinite; }
+.animate-micro     { animation: microPulse 2s ease-in-out infinite; }
+
+/* ─── Mic record ripple ──────────────────────────────────────── */
+.record-ripple {
+  position: relative;
+}
+.record-ripple::before,
+.record-ripple::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid #FF8C42;
+  animation: ripple 1.6s linear infinite;
+}
+.record-ripple::after { animation-delay: 0.55s; }
+
+/* ─── Card shine on hover ───────────────────────────────────── */
+.card-shine {
+  position: relative;
+  overflow: hidden;
+}
+.card-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.35) 60%, rgba(255,255,255,0) 80%);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.card-shine:hover::after { transform: translateX(100%); }
+
+/* ─── Gradient text ─────────────────────────────────────────── */
+.gradient-text-warm {
+  background: linear-gradient(135deg, #FF8C42, #FF5C8A);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.gradient-text-cool {
+  background: linear-gradient(135deg, #7B61FF, #A2D2FF);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+/* ─── Level ring ────────────────────────────────────────────── */
+.level-ring {
+  @apply w-12 h-12 rounded-full flex items-center justify-center text-lg font-extrabold text-white;
+  background: linear-gradient(135deg, #FF8C42, #FFB7A5);
+  box-shadow: 0 4px 14px rgba(255,140,66,0.4);
+}
+
+/* ─── Wave bars (recording) ─────────────────────────────────── */
+.wave-bar {
+  display: inline-block;
+  width: 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #FF8C42, #FFB7A5);
+  animation: wave 1s ease-in-out infinite;
+}
+@keyframes wave {
+  0%,100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(1); }
+}
+
+/* ─── Sidebar layout helper ─────────────────────────────────── */
+.layout-root { @apply flex min-h-screen bg-[#FFF8E7]; }
+.layout-main { @apply flex-1 flex flex-col min-w-0 bg-[#FFF8E7]; }
+.layout-content { @apply flex-1 p-4 md:p-6 space-y-6 overflow-y-auto max-w-6xl mx-auto w-full; }
