@@ -1,0 +1,4 @@
+backend/target/
+target/
+node_modules/
+.env
