@@ -1,9 +1,9 @@
-
+const WS_BASE_URL = process.env.REACT_APP_WS_URL;
 
 if (!WS_BASE_URL) {
     throw new Error(
         '[UnMute] REACT_APP_WS_URL is not set. ' +
-        'Create a .env.development file with REACT_APP_WS_URL=ws://localhost:8080/ws'
+        'Create a .env.development file with REACT_APP_WS_URL=process.env.REACT_APP_WS_URL'
     );
 }
 
