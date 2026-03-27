@@ -1,4 +1,11 @@
-const WS_BASE_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8080/ws';
+
+
+if (!WS_BASE_URL) {
+    throw new Error(
+        '[UnMute] REACT_APP_WS_URL is not set. ' +
+        'Create a .env.development file with REACT_APP_WS_URL=ws://localhost:8080/ws'
+    );
+}
 
 /**
  * WebSocket client with auto-reconnect, ping/pong, and message queuing.

@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+const BASE_URL = process.env.REACT_APP_API_URL;
+
+
+if (!BASE_URL) {
+    throw new Error(
+        '[UnMute] API URL is not set. ' +
+        'Set REACT_APP_API_URL in environment variables.'
+    );
+}
 
 const api = axios.create({
     baseURL: BASE_URL,
