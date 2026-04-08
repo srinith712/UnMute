@@ -1,153 +1,98 @@
-const WS_BASE_URL = process.env.REACT_APP_WS_URL;
+/* WebSocket Service */
 
-if (!WS_BASE_URL) {
-    throw new Error(
-        '[UnMute] REACT_APP_WS_URL is not set. ' +
-        'Create a .env.development file with REACT_APP_WS_URL=process.env.REACT_APP_WS_URL'
-    );
-}
+const WS_BASE_URL =
+    process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
 
-/**
- * WebSocket client with auto-reconnect, ping/pong, and message queuing.
- * Provides a clean API to the rest of the app.
- */
+/* Service */
 class WebSocketService {
     constructor() {
         this.socket = null;
         this.roomId = null;
-        this.handlers = {};       // event → [callbacks]
-        this.msgQueue = [];       // messages queued while disconnected
-        this.reconnectTimer = null;
-        this.reconnectDelay = 2000;
+        this.handlers = {};
+        this.queue = [];
+        this.reconnectAttempts = 0;
         this.maxReconnects = 5;
-        this.reconnectCount = 0;
-        this.pingInterval = null;
         this.intentionalClose = false;
     }
 
-    /* ── Connect ──────────────────────────────────────────────────── */
+    /* Connect */
     connect(roomId) {
         this.roomId = roomId;
         this.intentionalClose = false;
+
         const token = localStorage.getItem('unmute_token') || '';
         const url = `${WS_BASE_URL}/gd/${roomId}?token=${token}`;
 
         this.socket = new WebSocket(url);
 
         this.socket.onopen = () => {
-            this.reconnectCount = 0;
-            this.reconnectDelay = 2000;
-            this._emit('connected', { roomId });
+            this.reconnectAttempts = 0;
+            this._emit('connected');
             this._flushQueue();
-            this._startPing();
         };
 
-        this.socket.onmessage = (event) => {
+        this.socket.onmessage = (e) => {
             try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'pong') return;
+                const data = JSON.parse(e.data);
                 this._emit('message', data);
-                if (data.type) this._emit(data.type, data);
             } catch {
-                this._emit('message', { raw: event.data });
+                this._emit('message', { raw: e.data });
             }
         };
 
-        this.socket.onclose = (event) => {
-            this._stopPing();
-            this._emit('disconnected', { code: event.code, reason: event.reason });
-            if (!this.intentionalClose && this.reconnectCount < this.maxReconnects) {
-                this._scheduleReconnect();
+        this.socket.onclose = () => {
+            this._emit('disconnected');
+
+            if (!this.intentionalClose && this.reconnectAttempts < this.maxReconnects) {
+                this.reconnectAttempts++;
+                setTimeout(() => this.connect(this.roomId), 2000);
             }
         };
 
-        this.socket.onerror = (error) => {
-            this._emit('error', error);
+        this.socket.onerror = (err) => {
+            this._emit('error', err);
         };
     }
 
-    /* ── Disconnect ───────────────────────────────────────────────── */
+    /* Disconnect */
     disconnect() {
         this.intentionalClose = true;
-        this._stopPing();
-        clearTimeout(this.reconnectTimer);
         if (this.socket) {
-            this.socket.close(1000, 'User left');
+            this.socket.close();
             this.socket = null;
         }
         this.roomId = null;
-        this.msgQueue = [];
+        this.queue = [];
     }
 
-    /* ── Send message ─────────────────────────────────────────────── */
+    /* Send */
     send(type, payload = {}) {
-        const msg = JSON.stringify({ type, payload, ts: Date.now() });
+        const msg = JSON.stringify({ type, payload });
+
         if (this.socket?.readyState === WebSocket.OPEN) {
             this.socket.send(msg);
         } else {
-            this.msgQueue.push(msg);
+            this.queue.push(msg);
         }
     }
 
-    /* ── Event subscription ───────────────────────────────────────── */
-    on(event, callback) {
+    /* Events */
+    on(event, cb) {
         if (!this.handlers[event]) this.handlers[event] = [];
-        this.handlers[event].push(callback);
-        return () => this.off(event, callback); // returns unsubscribe function
+        this.handlers[event].push(cb);
     }
 
-    off(event, callback) {
-        if (!this.handlers[event]) return;
-        this.handlers[event] = this.handlers[event].filter(cb => cb !== callback);
-    }
-
-    /* ── Connection state ─────────────────────────────────────────── */
-    get isConnected() {
-        return this.socket?.readyState === WebSocket.OPEN;
-    }
-
-    get state() {
-        if (!this.socket) return 'closed';
-        const states = { 0: 'connecting', 1: 'open', 2: 'closing', 3: 'closed' };
-        return states[this.socket.readyState] || 'unknown';
-    }
-
-    /* ── Private helpers ──────────────────────────────────────────── */
     _emit(event, data) {
-        (this.handlers[event] || []).forEach(cb => {
-            try { cb(data); } catch (e) { console.error('WS handler error', e); }
-        });
+        (this.handlers[event] || []).forEach(cb => cb(data));
     }
 
     _flushQueue() {
-        while (this.msgQueue.length && this.socket?.readyState === WebSocket.OPEN) {
-            this.socket.send(this.msgQueue.shift());
+        while (this.queue.length && this.socket?.readyState === WebSocket.OPEN) {
+            this.socket.send(this.queue.shift());
         }
-    }
-
-    _scheduleReconnect() {
-        this.reconnectCount++;
-        this._emit('reconnecting', { attempt: this.reconnectCount, delay: this.reconnectDelay });
-        this.reconnectTimer = setTimeout(() => {
-            if (this.roomId) this.connect(this.roomId);
-        }, this.reconnectDelay);
-        this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 15000);
-    }
-
-    _startPing() {
-        this.pingInterval = setInterval(() => {
-            if (this.socket?.readyState === WebSocket.OPEN) {
-                this.socket.send(JSON.stringify({ type: 'ping' }));
-            }
-        }, 25000);
-    }
-
-    _stopPing() {
-        clearInterval(this.pingInterval);
-        this.pingInterval = null;
     }
 }
 
-/* Export a singleton */
+/* Singleton */
 const wsService = new WebSocketService();
 export default wsService;

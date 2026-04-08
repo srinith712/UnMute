@@ -1,158 +1,242 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import SpeechRecorder from '../components/SpeechRecorder';
 import ScoreCard from '../components/ScoreCard';
 import { practiceAPI } from '../services/api';
-import { generateDemoAnalysis } from '../services/speechAnalysis';
 
-
+/* ── Topics ───────────────────────── */
 const TOPICS = [
-    { id: 'self-intro',   label: 'Self Introduction', icon: '👤', desc: 'Introduce yourself confidently.' },
-    { id: 'storytelling', label: 'Storytelling',       icon: '📖', desc: 'Share a memorable story.' },
-    { id: 'opinion',      label: 'Express Opinion',    icon: '💬', desc: 'Voice your views on a topic.' },
-    { id: 'debate',       label: 'Debate Topic',       icon: '⚡', desc: 'Argue both sides of an issue.' },
-    { id: 'news',         label: 'News Summary',       icon: '📰', desc: 'Summarise a recent news item.' },
-    { id: 'freestyle',    label: 'Freestyle',          icon: '🎤', desc: 'Speak freely on any topic.' },
+    { id: 'self-intro',   label: 'Self Introduction' },
+    { id: 'storytelling', label: 'Storytelling' },
+    { id: 'opinion',      label: 'Opinion' },
+    { id: 'debate',       label: 'Debate' },
+    { id: 'news',         label: 'News Summary' },
+    { id: 'freestyle',    label: 'Freestyle' },
 ];
 
-export default function Practice() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [selectedTopic, setSelectedTopic] = useState(null);
-    const [scores, setScores] = useState(null);
-    const [feedback, setFeedback] = useState('');
-    const [improvementTips, setImprovementTips] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [history, setHistory] = useState([]);
+/**
+ * Derive today's task ID using the SAME rotation as the backend:
+ *   dayOfYear % 8  → 0-based index → task IDs are "1"–"8"
+ * This ensures localStorage always stores the correct task ID.
+ */
+function getTodayTaskId() {
+    const now  = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const diff  = now - start;
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay); // 1-based
+    const index = dayOfYear % 8;                 // 0-based, matches backend
+    return String(index + 1);                    // "1"–"8"
+}
 
-    /* Load session history */
+export default function Practice() {
+
+    const [sidebarOpen, setSidebarOpen]   = useState(false);
+    const [selectedTopic, setSelectedTopic] = useState(null);
+    const [scores, setScores]             = useState(null);
+    const [feedback, setFeedback]         = useState('');
+    const [tips, setTips]                 = useState([]);
+    const [fillerCount, setFillerCount]   = useState(null);
+    const [loading, setLoading]           = useState(false);
+    const [history, setHistory]           = useState([]);
+    const [lastTranscript, setLastTranscript] = useState('');
+    const [warning, setWarning]               = useState('');
+
+    /* ── Load History ───────────────────────── */
     useEffect(() => {
         practiceAPI.getHistory()
-            .then(res => setHistory(Array.isArray(res.data) ? res.data : []))
-            .catch(() => { });
+            .then(res => setHistory(res.data || []))
+            .catch(() => {});
     }, []);
 
-    const handleRecordingComplete = useCallback(async (blob, duration) => {
+    /* ── Handle Recording Complete ───────────────────────── */
+    const handleRecordingComplete = async (blob, duration, transcript) => {
+
         if (!blob) return;
+
         setLoading(true);
         setScores(null);
         setFeedback('');
-        setImprovementTips([]);
+        setTips([]);
+        setFillerCount(null);
+        setWarning('');
+        setLastTranscript(transcript || '');
+
+        const topicId = selectedTopic?.id || 'freestyle';
+
+        const wordCount = transcript ? transcript.trim().split(/\s+/).filter(Boolean).length : 0;
+
         try {
-            const res = await practiceAPI.uploadAudio(blob, {
-                topic: selectedTopic?.id || 'freestyle',
-                duration,
-            });
-            setScores(res.data?.scores || null);
+            /* ── Guard: too little speech ── */
+            if (wordCount < 5) {
+                setWarning(
+                    wordCount === 0
+                        ? '⚠️ No speech detected. Make sure your microphone is working and you spoke clearly.'
+                        : `⚠️ Too short (${wordCount} word${wordCount !== 1 ? 's' : ''} detected). Speak for at least 15–20 seconds for accurate analysis.`
+                );
+                return; // finally still runs — setLoading(false) is there
+            }
+
+            /* ── PRIMARY: transcript-based NLP ── */
+            const res = await practiceAPI.analyzeTranscript(transcript, topicId);
+
+            setScores(res.data?.scores);
             setFeedback(res.data?.feedback || '');
-            setImprovementTips(res.data?.improvementTips || []);
-        } catch {
-            /* Backend unavailable — use smart demo analysis */
-            const topicId = selectedTopic?.id || 'freestyle';
-            const expectedSec = topicId === 'freestyle' ? 60 : topicId === 'news' ? 90 : 60;
-            const demo = generateDemoAnalysis(duration, topicId, expectedSec);
-            setScores(demo.scores);
-            setFeedback(demo.feedback);
-            setImprovementTips(demo.improvementTips);
+            setTips(res.data?.improvementTips || []);
+            setFillerCount(res.data?.fillerWords ?? null);
+
+        } catch (err) {
+            /* Show the actual error for easier debugging */
+            const status  = err.response?.status;
+            const errMsg  = err.response?.data?.error || err.response?.data?.message || err.message;
+
+            console.error('Analysis error — status:', status, '| message:', errMsg, err);
+
+            if (!status) {
+                // True network error (CORS, backend down, no response)
+                setWarning('⚠️ Cannot reach the server. Is the backend running on port 8080?');
+            } else if (status === 401) {
+                setWarning('⚠️ Session issue (401). Log out and log back in.');
+            } else if (status === 400) {
+                setWarning(`⚠️ Bad request: ${errMsg}`);
+            } else {
+                // 500 or other — show actual server error
+                setWarning(`⚠️ Server error (${status}): ${errMsg || 'Unknown error. Check backend logs.'}`);
+            }
+
         } finally {
             setLoading(false);
-        }
-    }, [selectedTopic]);
 
+            /* ── AUTO-COMPLETE DAILY TASK ── */
+            if (duration >= 30) {
+                const today      = new Date().toISOString().split('T')[0];
+                const taskId     = getTodayTaskId();
+
+                localStorage.setItem('dailyTask', JSON.stringify({
+                    taskId,
+                    date: today,
+                }));
+
+                console.log(`✅ Daily task auto-completed: taskId=${taskId}, date=${today}`);
+            }
+        }
+    };
 
     return (
-        <div className="layout-root">
+        <div className="flex">
+
             <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-            <div className="layout-main">
+            <div className="flex-1">
+
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
-                <main className="layout-content">
-                    {/* Header */}
-                    <div>
-                        <h2 className="page-title">🎙️ Speech Practice</h2>
-                        <p className="page-subtitle mt-1">Choose a topic, record your response, and get instant AI feedback.</p>
-                    </div>
+                <div className="p-4 md:p-6 max-w-6xl mx-auto">
 
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-                        {/* Left: topic picker + recorder */}
-                        <div className="lg:col-span-3 space-y-5">
-                            {/* Topic selection */}
-                            <div className="card mb-6">
-                                <h3 className="section-title mb-3">🗂️ Choose a Topic</h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {TOPICS.map(topic => (
-                                        <button
-                                            key={topic.id}
-                                            onClick={() => setSelectedTopic(topic)}
-                                            className={`
-                        flex flex-col items-start gap-1 p-3 rounded-xl border text-left
-                        transition-all duration-200
-                        ${selectedTopic?.id === topic.id
-                                                    ? 'bg-purple-100 border-purple-400'
-                                                    : 'bg-white border-gray-200 hover:border-purple-300'
-                                                }
-                      `}
-                                        >
-                                            <span className="text-xl">{topic.icon}</span>
-                                            <span className={`text-xs font-semibold leading-tight ${selectedTopic?.id === topic.id ? 'text-purple-600' : 'text-gray-700'}`}>{topic.label}</span>
-                                            <span className="text-gray-400 text-[10px] leading-tight">{topic.desc}</span>
-                                        </button>
-                                    ))}
-                                </div>
+                    <h2 className="text-xl font-bold mb-1">Speech Practice 🎤</h2>
+                    <p className="text-sm text-gray-500 mb-6">
+                        Select a topic, record your speech, and get instant AI feedback.
+                    </p>
 
-                                {selectedTopic && (
-                                    <div className="mt-4 px-4 py-3 rounded-xl bg-purple-50 border border-purple-200 animate-fade-in">
-                                        <p className="text-purple-600 text-xs font-semibold">
-                                            {selectedTopic.icon} {selectedTopic.label}
-                                        </p>
-                                        <p className="text-gray-500 text-xs mt-0.5">{selectedTopic.desc}</p>
-                                    </div>
-                                )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                        {/* LEFT — Record */}
+                        <div className="card">
+
+                            <h3 className="section-title mb-3">1. Choose a Topic</h3>
+
+                            <div className="grid grid-cols-2 gap-2 mb-5">
+                                {TOPICS.map(t => (
+                                    <button
+                                        key={t.id}
+                                        id={`topic-${t.id}`}
+                                        onClick={() => setSelectedTopic(t)}
+                                        className={`border p-2 rounded-lg text-sm font-medium transition-all duration-150
+                                            ${selectedTopic?.id === t.id
+                                                ? 'bg-purple-600 text-white border-purple-600'
+                                                : 'bg-white text-gray-700 border-gray-200 hover:bg-purple-50'
+                                            }`}
+                                    >
+                                        {t.label}
+                                    </button>
+                                ))}
                             </div>
 
-                            {/* Recorder */}
-                            <div className="card">
-                                <h3 className="section-title mb-1">🎤 Record Your Response</h3>
-                                <p className="text-gray-500 text-xs mb-3">Max 2 minutes per session</p>
-                                <SpeechRecorder
-                                    onRecordingComplete={handleRecordingComplete}
-                                    maxDuration={120}
-                                    disabled={!selectedTopic}
-                                />
-                                {!selectedTopic && (
-                                    <p className="text-center text-gray-400 text-xs mt-2">
-                                        👆 Select a topic above to enable recording
-                                    </p>
-                                )}
-                            </div>
+                            <h3 className="section-title mb-1">2. Record</h3>
+                            <p className="text-xs text-gray-400 mb-3">
+                                Speak clearly for at least 30 seconds to complete today's task.
+                            </p>
+
+                            <SpeechRecorder
+                                onRecordingComplete={handleRecordingComplete}
+                                maxDuration={120}
+                                disabled={!selectedTopic}
+                            />
+
                         </div>
 
-                        {/* Right: ScoreCard + history */}
-                        <div className="lg:col-span-2 space-y-5">
-                            <ScoreCard scores={scores} feedback={feedback} improvementTips={improvementTips} loading={loading} />
+                        {/* RIGHT — Results */}
+                        <div className="space-y-4">
 
-                            {/* Session history */}
+                            {/* Warning message */}
+                            {warning && (
+                                <div className="card border-l-4 border-orange-400 bg-orange-50">
+                                    <p className="text-sm text-orange-700">{warning}</p>
+                                </div>
+                            )}
+
+                            {/* Transcript preview (shown after recording) */}
+                            {lastTranscript && !loading && !warning && (
+                                <div className="card">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                        Your Transcript
+                                    </p>
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                        {lastTranscript}
+                                    </p>
+                                    {fillerCount !== null && (
+                                        <p className="text-xs text-orange-500 mt-2">
+                                            🔍 {fillerCount} filler word{fillerCount !== 1 ? 's' : ''} detected
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <ScoreCard
+                                scores={scores}
+                                feedback={feedback}
+                                improvementTips={tips}
+                                loading={loading}
+                            />
+
+                            {/* History */}
                             {history.length > 0 && (
                                 <div className="card">
-                                    <h3 className="section-title mb-3">📋 Recent Sessions</h3>
-                                    <ul className="space-y-3">
-                                        {history.slice(0, 5).map((s, i) => (
-                                            <li key={i} className="flex items-center justify-between py-2
-                                             border-b border-gray-100 last:border-0">
-                                                <div>
-                                                    <p className="text-gray-700 text-xs font-medium">{s.topic || 'Freestyle'}</p>
-                                                    <p className="text-gray-400 text-[10px]">{s.date || 'Recently'}</p>
-                                                </div>
-                                                <span className="text-green-500 font-bold text-sm">{s.score ?? '—'}</span>
+                                    <h3 className="section-title mb-3">Recent Sessions</h3>
+                                    <ul className="space-y-2">
+                                        {history.slice(0, 5).map((h, i) => (
+                                            <li
+                                                key={h.id || i}
+                                                className="flex justify-between items-center border-b pb-2 last:border-0"
+                                            >
+                                                <span className="text-sm text-gray-600">
+                                                    {h.topic || 'Freestyle'}
+                                                </span>
+                                                <span className="badge badge-purple">
+                                                    {h.scores?.overall
+                                                        ? `${Math.round(h.scores.overall)}/100`
+                                                        : h.score || '-'}
+                                                </span>
                                             </li>
                                         ))}
                                     </ul>
                                 </div>
                             )}
+
                         </div>
                     </div>
-                </main>
+                </div>
             </div>
         </div>
     );

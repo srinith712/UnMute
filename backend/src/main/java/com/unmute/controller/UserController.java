@@ -2,64 +2,111 @@ package com.unmute.controller;
 
 import com.unmute.model.User;
 import com.unmute.service.UserService;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * User Controller
+ * Handles profile and leaderboard
+ */
 @RestController
 @RequestMapping("/user")
 @RequiredArgsConstructor
+@CrossOrigin(
+        origins = {
+                "http://localhost:3000",
+                "https://unmute-six.vercel.app"
+        }
+)
 public class UserController {
 
     private final UserService userService;
 
+    /* ── Get Profile ───────────────────── */
     @GetMapping("/profile")
-    public ResponseEntity<Map<String, Object>> getProfile(Authentication auth) {
+    public ResponseEntity<Map<String, Object>> getProfile(
+            Authentication auth
+    ) {
+
+        if (auth == null || auth.getName() == null) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "Unauthorized"));
+        }
+
         User user = userService.getByEmail(auth.getName());
+
         return ResponseEntity.ok(mapUser(user));
     }
 
+    /* ── Update Profile ────────────────── */
     @PutMapping("/profile")
     public ResponseEntity<Map<String, Object>> updateProfile(
             Authentication auth,
-            @RequestBody Map<String, String> body) {
-        User updated = userService.updateProfile(auth.getName(), body.get("name"));
-        return ResponseEntity.ok(mapUser(updated));
+            @RequestBody Map<String, String> body
+    ) {
+
+        if (auth == null || auth.getName() == null) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "Unauthorized"));
+        }
+
+        String name = body.getOrDefault("name", "").trim();
+
+        if (name.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Name cannot be empty"));
+        }
+
+        User updatedUser = userService.updateProfile(
+                auth.getName(),
+                name
+        );
+
+        return ResponseEntity.ok(mapUser(updatedUser));
     }
 
+    /* ── Leaderboard ───────────────────── */
     @GetMapping("/leaderboard")
     public ResponseEntity<List<Map<String, Object>>> getLeaderboard() {
+
         List<User> leaders = userService.getLeaderboard();
-        List<Map<String, Object>> result = leaders.stream()
+
+        List<Map<String, Object>> response = leaders.stream()
                 .limit(20)
-                .map(u -> {
+                .map(user -> {
                     Map<String, Object> entry = new LinkedHashMap<>();
-                    entry.put("userId", u.getId());
-                    entry.put("name", u.getName());
-                    entry.put("rating", u.getRating());
-                    entry.put("level", u.getLevel());
-                    entry.put("xp", u.getXp());
+                    entry.put("userId", user.getId());
+                    entry.put("name", user.getName());
+                    entry.put("rating", user.getRating());
+                    entry.put("level", user.getLevel());
+                    entry.put("xp", user.getXp());
                     return entry;
                 })
                 .collect(Collectors.toList());
-        return ResponseEntity.ok(result);
+
+        return ResponseEntity.ok(response);
     }
 
-    private Map<String, Object> mapUser(User u) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("userId", u.getId());
-        m.put("name", u.getName());
-        m.put("email", u.getEmail());
-        m.put("level", u.getLevel());
-        m.put("xp", u.getXp());
-        m.put("rating", u.getRating());
-        m.put("createdAt", u.getCreatedAt());
-        return m;
+    /* ── Helper: Map User ─────────────── */
+    private Map<String, Object> mapUser(User user) {
+
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("userId", user.getId());
+        response.put("name", user.getName());
+        response.put("email", user.getEmail());
+        response.put("level", user.getLevel());
+        response.put("xp", user.getXp());
+        response.put("rating", user.getRating());
+        response.put("createdAt", user.getCreatedAt());
+
+        return response;
     }
 }

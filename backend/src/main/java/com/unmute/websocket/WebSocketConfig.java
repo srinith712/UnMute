@@ -13,9 +13,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
         this.gdHandler = gdHandler;
     }
 
+    /* ─── Register WebSocket Endpoint ───────────────── */
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+
         registry.addHandler(gdHandler, "/ws/gd/{roomId}")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*"); // allow frontend (dev + prod)
     }
 }

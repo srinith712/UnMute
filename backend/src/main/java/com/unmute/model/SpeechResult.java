@@ -1,10 +1,14 @@
 package com.unmute.model;
 
 import jakarta.persistence.*;
+
 import lombok.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * Speech Analysis Result Entity
+ */
 @Entity
 @Table(name = "speech_results")
 @Getter
@@ -18,13 +22,16 @@ public class SpeechResult {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /* ── User Relation ─────────────────── */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /* ── Input Data ───────────────────── */
     @Column(name = "input_text", columnDefinition = "TEXT")
     private String inputText;
 
+    /* ── Scores ───────────────────────── */
     @Column(name = "fluency_score")
     private Double fluencyScore;
 
@@ -46,17 +53,17 @@ public class SpeechResult {
     @Column(name = "overall_score")
     private Double overallScore;
 
+    /* ── Feedback ─────────────────────── */
     @Column(name = "improvement_tips", columnDefinition = "TEXT")
     private String improvementTips;
 
-    @Column(name = "analyzed_at", updatable = false)
-    @Builder.Default
-    private LocalDateTime analyzedAt = LocalDateTime.now();
+    /* ── Timestamp ────────────────────── */
+    @Column(name = "analyzed_at", nullable = false, updatable = false)
+    private LocalDateTime analyzedAt;
 
+    /* ── Lifecycle Hook ───────────────── */
     @PrePersist
     protected void onCreate() {
-        if (analyzedAt == null) {
-            analyzedAt = LocalDateTime.now();
-        }
+        this.analyzedAt = LocalDateTime.now();
     }
 }

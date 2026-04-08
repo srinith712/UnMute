@@ -9,24 +9,29 @@ import {
     Tooltip,
 } from 'recharts';
 
-/* ── Custom tooltip ──────────────────────────────────────────── */
+/* ── Tooltip ───────────────────────── */
 function CustomTooltip({ active, payload, label }) {
     if (!active || !payload?.length) return null;
+
     return (
-        <div className="card px-3 py-2.5 shadow-card-md text-xs">
-            <p className="text-ink-400 mb-1.5 font-semibold">{label}</p>
+        <div className="bg-white border p-2 rounded shadow text-xs">
+            <p className="text-gray-500 mb-1">{label}</p>
+
             {payload.map(p => (
-                <div key={p.dataKey} className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
-                    <span className="text-ink-500 capitalize">{p.name}:</span>
-                    <span className="text-ink-900 font-bold">{p.value}</span>
+                <div key={p.dataKey} className="flex gap-2">
+                    <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ background: p.color }}
+                    />
+                    <span className="text-gray-600">{p.name}:</span>
+                    <span className="font-semibold">{p.value}</span>
                 </div>
             ))}
         </div>
     );
 }
 
-/* ── Demo data ───────────────────────────────────────────────── */
+/* ── Demo data ───────────────────────── */
 const DEMO_DATA = [
     { day: 'Mon', overall: 55, fluency: 48, grammar: 60 },
     { day: 'Tue', overall: 62, fluency: 58, grammar: 65 },
@@ -40,73 +45,48 @@ const DEMO_DATA = [
 const SERIES = [
     { key: 'overall', name: 'Overall', color: '#7B61FF' },
     { key: 'fluency', name: 'Fluency', color: '#FF8C42' },
-    { key: 'grammar', name: 'Grammar', color: '#7DC090' },
+    { key: 'grammar', name: 'Grammar', color: '#4CAF50' },
 ];
 
-/**
- * ProgressChart
- * Props:
- *   data    – array of { day, overall, fluency, grammar }
- *   title   – string
- *   loading – boolean
- */
-export default function ProgressChart({ data, title = 'Weekly Progress', loading = false }) {
+/* ── Main Component ───────────────────────── */
+export default function ProgressChart({
+    data,
+    title = 'Weekly Progress',
+    loading = false,
+}) {
     const chartData = data?.length ? data : DEMO_DATA;
 
+    /* ── Loading UI ───────────────────────── */
     if (loading) {
         return (
-            <div className="card p-5 animate-pulse">
-                <div className="h-4 w-36 bg-cream-200 rounded mb-4" />
-                <div className="h-48 bg-cream-200 rounded-2xl" />
+            <div className="p-4 border rounded">
+                <div className="h-4 w-32 bg-gray-200 mb-3 rounded" />
+                <div className="h-48 bg-gray-200 rounded" />
             </div>
         );
     }
 
     return (
-        <div className="card p-5">
+        <div className="p-4 border rounded">
+
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <h3 className="section-title text-base">📈 {title}</h3>
-                    <p className="section-sub">Last 7 days · Score out of 100</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    {SERIES.map(s => (
-                        <div key={s.key} className="hidden sm:flex items-center gap-1">
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
-                            <span className="text-ink-400 text-[10px] font-medium">{s.name}</span>
-                        </div>
-                    ))}
-                </div>
+            <div className="mb-3">
+                <h3 className="font-semibold">📈 {title}</h3>
+                <p className="text-xs text-gray-500">
+                    Last 7 days (scores out of 100)
+                </p>
             </div>
 
+            {/* Chart */}
             <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                    <defs>
-                        {SERIES.map(s => (
-                            <linearGradient key={s.key} id={`color-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%"  stopColor={s.color} stopOpacity={0.25} />
-                                <stop offset="95%" stopColor={s.color} stopOpacity={0}    />
-                            </linearGradient>
-                        ))}
-                    </defs>
+                <AreaChart data={chartData}>
 
-                    <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="#E8DFC8"
-                        vertical={false}
-                    />
-                    <XAxis
-                        dataKey="day"
-                        tick={{ fill: '#AAAABC', fontSize: 11, fontWeight: 500 }}
-                        axisLine={false} tickLine={false}
-                    />
-                    <YAxis
-                        domain={[0, 100]}
-                        tick={{ fill: '#AAAABC', fontSize: 11 }}
-                        axisLine={false} tickLine={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#E8DFC8', strokeWidth: 1 }} />
+                    <CartesianGrid strokeDasharray="3 3" />
+
+                    <XAxis dataKey="day" />
+                    <YAxis domain={[0, 100]} />
+
+                    <Tooltip content={<CustomTooltip />} />
 
                     {SERIES.map(s => (
                         <Area
@@ -115,14 +95,14 @@ export default function ProgressChart({ data, title = 'Weekly Progress', loading
                             dataKey={s.key}
                             name={s.name}
                             stroke={s.color}
-                            strokeWidth={2}
-                            fill={`url(#color-${s.key})`}
-                            dot={{ fill: s.color, r: 3, strokeWidth: 0 }}
-                            activeDot={{ r: 5, fill: s.color }}
+                            fill={s.color}
+                            fillOpacity={0.2}
                         />
                     ))}
+
                 </AreaChart>
             </ResponsiveContainer>
+
         </div>
     );
 }

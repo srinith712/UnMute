@@ -5,6 +5,9 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * User Entity
+ */
 @Entity
 @Table(name = "users")
 @Getter
@@ -18,6 +21,7 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /* ── Basic Info ───────────────────── */
     @Column(nullable = false)
     private String name;
 
@@ -27,6 +31,7 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    /* ── Progress ─────────────────────── */
     @Column(nullable = false)
     @Builder.Default
     private Integer level = 1;
@@ -39,14 +44,13 @@ public class User {
     @Builder.Default
     private Integer rating = 1000;
 
-    @Column(name = "created_at", updatable = false)
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    /* ── Timestamp ────────────────────── */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
+    /* ── Lifecycle ────────────────────── */
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
+        this.createdAt = LocalDateTime.now();
     }
 }

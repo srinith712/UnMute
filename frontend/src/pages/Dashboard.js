@@ -1,173 +1,201 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import ProgressChart from '../components/ProgressChart';
 import DailyTaskCard from '../components/DailyTaskCard';
-import MissionTracker from '../components/MissionTracker';
-import { useAuth } from '../context/AuthContext';
+import ProgressChart from '../components/ProgressChart';
 import { dashboardAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
-/* ── Stat Card ─────────────────────────────────────────────── */
-function StatCard({ icon, label, value, sub, bg }) {
+/* ── Stat Card ───────────────────────── */
+function StatCard({ icon, label, value, sub, color = 'purple' }) {
+
+    const colors = {
+        purple: 'bg-purple-50 text-purple-600',
+        orange: 'bg-orange-50 text-orange-600',
+        green:  'bg-green-50  text-green-600',
+        blue:   'bg-blue-50   text-blue-600',
+    };
+
     return (
-        <div className="card hover:shadow-md transition flex flex-col gap-2">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl ${bg}`}>
+        <div className="card flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${colors[color]}`}>
                 {icon}
             </div>
-            <p className="text-gray-500 text-xs font-medium">{label}</p>
-            <p className="text-gray-800 text-2xl font-bold leading-none">{value}</p>
-            {sub && <p className="text-gray-400 text-xs">{sub}</p>}
+            <div>
+                <p className="text-xs text-gray-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-gray-800">{value}</p>
+                {sub && <p className="text-xs text-gray-400">{sub}</p>}
+            </div>
         </div>
     );
 }
 
-/* ── Quick action button ──────────────────────────────────── */
-function QuickAction({ to, icon, label, bg }) {
-    return (
-        <Link
-            to={to}
-            className="card hover:shadow-md transition flex flex-col items-center gap-2 text-center cursor-pointer"
-        >
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl ${bg}`}>
-                {icon}
-            </div>
-            <span className="text-gray-500 text-xs font-medium">
-                {label}
-            </span>
-        </Link>
-    );
-}
-
+/* ── Dashboard ───────────────────────── */
 export default function Dashboard() {
-    const { user, updateUser } = useAuth();
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [stats, setStats] = useState(null);
-    const [tasks, setTasks] = useState([]);
-    const [progress, setProgress] = useState(null);
-    const [loading, setLoading] = useState(true);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const [statsRes, tasksRes, progressRes] = await Promise.allSettled([
-                dashboardAPI.getStats(),
-                dashboardAPI.getDailyTasks(),
-                dashboardAPI.getProgress(),
-            ]);
-            if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
-            if (tasksRes.status === 'fulfilled') setTasks(tasksRes.value.data?.tasks || []);
-            if (progressRes.status === 'fulfilled') setProgress(progressRes.value.data);
-        } catch {
-            /* Use demo data silently */
-        } finally {
-            setLoading(false);
-        }
+    const { user } = useAuth();
+
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [task,    setTask]    = useState(null);
+    const [stats,   setStats]   = useState(null);
+    const [progress, setProgress] = useState([]);
+    const [loadingTask,  setLoadingTask]  = useState(true);
+    const [loadingStats, setLoadingStats] = useState(true);
+    const [loadingChart, setLoadingChart] = useState(true);
+
+    /* ── Fetch daily task ───────────────────────── */
+    useEffect(() => {
+        const fetchTask = async () => {
+            try {
+                const res = await dashboardAPI.getDailyTasks();
+                const today  = new Date().toISOString().split('T')[0];
+                const stored = (() => {
+                    try { return JSON.parse(localStorage.getItem('dailyTask')); }
+                    catch { return null; }
+                })();
+
+                let apiTask = res.data?.tasks?.[0] || null;
+
+                /* Fallback if backend returns nothing */
+                if (!apiTask) {
+                    apiTask = {
+                        id: '1',
+                        title: 'Practice Speaking',
+                        description: 'Record a 60-second speech on any topic',
+                        type: 'practice',
+                        completed: false,
+                        xpReward: 50,
+                    };
+                }
+
+                /* Mark completed from localStorage */
+                if (stored && stored.date === today && stored.taskId === apiTask.id) {
+                    apiTask = { ...apiTask, completed: true };
+                }
+
+                /* Store today's task ID in sessionStorage for Practice page to read */
+                sessionStorage.setItem('todayTaskId', apiTask.id);
+
+                setTask(apiTask);
+            } catch {
+                setTask({
+                    id: '1',
+                    title: 'Practice Speaking',
+                    description: 'Record a 60-second speech on any topic',
+                    type: 'practice',
+                    completed: false,
+                    xpReward: 50,
+                });
+            } finally {
+                setLoadingTask(false);
+            }
+        };
+
+        fetchTask();
     }, []);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    /* ── Fetch stats ───────────────────────── */
+    useEffect(() => {
+        dashboardAPI.getStats()
+            .then(res  => setStats(res.data))
+            .catch(() => setStats(null))
+            .finally(() => setLoadingStats(false));
+    }, []);
 
-    const handleCompleteTask = async (taskId) => {
-        try {
-            const res = await dashboardAPI.completeTask(taskId);
-            if (res.data?.xpEarned) {
-                updateUser({ xp: (user?.xp || 0) + res.data.xpEarned });
-            }
-        } catch { /* ignore */ }
-    };
+    /* ── Fetch progress chart ───────────────────────── */
+    useEffect(() => {
+        dashboardAPI.getProgress()
+            .then(res  => {
+                // Backend returns { weekly: [...] }
+                const raw = res.data?.weekly || [];
+                // Remap to what ProgressChart expects: { day, overall, fluency, grammar }
+                const mapped = raw.map(p => ({
+                    day:      p.date || p.day,
+                    overall:  p.overall  || 0,
+                    fluency:  p.fluency  || 0,
+                    grammar:  p.grammar  || 0,
+                }));
+                setProgress(mapped);
+            })
+            .catch(() => setProgress([]))
+            .finally(() => setLoadingChart(false));
+    }, []);
 
-    /* ── Demo stats if backend unavailable ─────────────────── */
-    const displayStats = stats || {
-        xp: user?.xp || 1250,
-        level: user?.level || 3,
-        rating: user?.rating || 78,
-        sessions: 24,
-        streak: 7,
-        rank: '#42',
-    };
-
-    const xpToNext = 1000 - (displayStats.xp % 1000);
-    const xpPercent = ((displayStats.xp % 1000) / 1000) * 100;
-
-    const greetingHour = new Date().getHours();
-    const greeting = greetingHour < 12 ? 'Good morning' : greetingHour < 18 ? 'Good afternoon' : 'Good evening';
+    /* ── Derived stat values ───────────────────────── */
+    const displayXp     = stats?.xp      ?? user?.xp    ?? 0;
+    const displayLevel  = stats?.level   ?? user?.level ?? 1;
+    const displayRating = stats?.rating  != null ? stats.rating.toFixed(1) : '—';
+    const displayStreak = stats?.streak  ?? 0;
 
     return (
-        <div className="layout-root">
+        <div className="flex">
+
             <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-            <div className="layout-main">
+            <div className="flex-1">
+
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
 
-                <main className="layout-content">
-                    {/* ── Hero Greeting Banner ─────────────────── */}
-                    <div className="card mb-6">
-                        <div className="flex items-center justify-between flex-wrap gap-4">
-                            <div className="flex-1 min-w-0">
-                                <p className="text-gray-500 text-sm">{greeting},</p>
-                                <h2 className="font-semibold text-2xl text-gray-800 mt-0.5">
-                                    {user?.name?.split(' ')[0] || 'Champion'} 👋
-                                </h2>
-                                <p className="text-gray-500 text-sm mt-1">
-                                    Ready to level up your communication today?
-                                </p>
+                <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
 
-                                {/* XP progress */}
-                                <div className="mt-4 max-w-xs">
-                                    <div className="flex justify-between text-xs mb-1.5">
-                                        <span className="text-gray-500 font-medium">Level {displayStats.level}</span>
-                                        <span className="text-purple-500 font-semibold">{displayStats.xp} XP ⚡</span>
-                                    </div>
-                                    <div className="xp-bar-track">
-                                        <div className="xp-bar-fill" style={{ width: `${xpPercent}%` }} />
-                                    </div>
-                                    <p className="text-gray-400 text-xs mt-1">{xpToNext} XP to Level {displayStats.level + 1}</p>
-                                </div>
-                            </div>
-
-                            {/* Streak badge */}
-                            <div className="hidden sm:flex flex-col items-center gap-1 flex-shrink-0">
-                                <div className="w-18 h-18 rounded-xl flex flex-col items-center justify-center
-                                    bg-orange-50 border border-orange-200 px-4 py-3">
-                                    <span className="text-orange-500 text-2xl font-bold">{displayStats.streak}</span>
-                                    <span className="text-gray-500 text-[10px]">day streak</span>
-                                </div>
-                                <span className="text-orange-500 text-xs font-medium">🔥 On fire!</span>
-                            </div>
-                        </div>
+                    {/* Header */}
+                    <div>
+                        <h2 className="page-title">
+                            Welcome back, {user?.name?.split(' ')[0] || 'there'} 👋
+                        </h2>
+                        <p className="page-subtitle">Here's your progress summary</p>
                     </div>
 
-                    {/* ── Stat Cards ───────────────────────────── */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <StatCard icon="⭐" label="Rating Score"  value={displayStats.rating}         sub="out of 100"   bg="bg-orange-50" />
-                        <StatCard icon="🎯" label="Sessions Done" value={displayStats.sessions}        sub="all time"     bg="bg-blue-50" />
-                        <StatCard icon="🏆" label="Global Rank"   value={displayStats.rank}            sub="leaderboard"  bg="bg-green-50" />
-                        <StatCard icon="🔥" label="Day Streak"    value={`${displayStats.streak}d`}   sub="keep going!"  bg="bg-orange-50" />
+                    {/* Stats Row */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatCard
+                            icon="⚡"
+                            label="Total XP"
+                            value={loadingStats ? '…' : displayXp.toLocaleString()}
+                            color="purple"
+                        />
+                        <StatCard
+                            icon="🏆"
+                            label="Level"
+                            value={loadingStats ? '…' : displayLevel}
+                            sub="Keep going!"
+                            color="orange"
+                        />
+                        <StatCard
+                            icon="⭐"
+                            label="Rating"
+                            value={loadingStats ? '…' : displayRating}
+                            sub="out of 5"
+                            color="blue"
+                        />
+                        <StatCard
+                            icon="🔥"
+                            label="Streak"
+                            value={loadingStats ? '…' : `${displayStreak}d`}
+                            sub="days"
+                            color="green"
+                        />
                     </div>
 
-                    {/* ── Quick Actions ────────────────────────── */}
-                    <div className="mb-6">
-                        <h3 className="section-title mb-3">🚀 Jump Back In</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                            <QuickAction to="/practice"    icon="🎤" label="Practice Speech"   bg="bg-orange-50" />
-                            <QuickAction to="/interview"   icon="💼" label="Mock Interview"     bg="bg-blue-50" />
-                            <QuickAction to="/gd"          icon="👥" label="Group Discussion"   bg="bg-green-50" />
-                            <QuickAction to="/learning"    icon="📚" label="Learning Hub"       bg="bg-purple-50" />
-                            <QuickAction to="/challenges"  icon="⚡" label="Challenges"         bg="bg-orange-50" />
-                            <QuickAction to="/personality" icon="🧠" label="Personality"        bg="bg-purple-50" />
-                        </div>
+                    {/* Daily Task — EXACTLY ONE */}
+                    <div>
+                        <h3 className="section-title mb-3">Today's Task</h3>
+                        <DailyTaskCard
+                            task={task}
+                            loading={loadingTask}
+                        />
                     </div>
 
-                    {/* ── Chart + Tasks + Missions ─────────────── */}
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-                        <div className="lg:col-span-3 space-y-5">
-                            <ProgressChart data={progress?.weekly} loading={loading} />
-                            <MissionTracker />
-                        </div>
-                        <div className="lg:col-span-2">
-                            <DailyTaskCard tasks={tasks} onComplete={handleCompleteTask} loading={loading} />
-                        </div>
+                    {/* Progress Chart */}
+                    <div>
+                        <ProgressChart
+                            data={progress}
+                            title="Weekly Progress"
+                            loading={loadingChart}
+                        />
                     </div>
-                </main>
+
+                </div>
             </div>
         </div>
     );

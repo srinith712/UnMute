@@ -12,29 +12,40 @@ import PersonalityModule from './pages/PersonalityModule';
 import LearningHub from './pages/LearningHub';
 import Challenges from './pages/Challenges';
 
-/* Protected wrapper */
+/* Loader */
+function Loader() {
+    return (
+        <div className="min-h-screen flex items-center justify-center">
+            <p>Loading...</p>
+        </div>
+    );
+}
+
+/* Protected Route */
 function ProtectedRoute({ children }) {
     const { user, loading } = useAuth();
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-cream-100 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 rounded-full border-2 border-purple-500/30 border-t-purple-500 animate-spin" />
-                    <p className="text-ink-400 text-sm">Loading UnMute…</p>
-                </div>
-            </div>
-        );
-    }
+    if (loading) return <Loader />;
 
     return user ? children : <Navigate to="/login" replace />;
 }
 
-/* Public-only wrapper (redirect logged-in users to dashboard) */
+/* Public Route */
 function PublicRoute({ children }) {
     const { user, loading } = useAuth();
-    if (loading) return null;
+
+    if (loading) return <Loader />;
+
     return user ? <Navigate to="/dashboard" replace /> : children;
+}
+
+/* Root redirect */
+function RootRedirect() {
+    const { user, loading } = useAuth();
+
+    if (loading) return <Loader />;
+
+    return <Navigate to={user ? "/dashboard" : "/login"} replace />;
 }
 
 export default function App() {
@@ -42,12 +53,15 @@ export default function App() {
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
-                    {/* Public routes */}
-                    <Route path="/" element={<Navigate to="/login" replace />} />
+
+                    {/* Root */}
+                    <Route path="/" element={<RootRedirect />} />
+
+                    {/* Public */}
                     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
                     <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
 
-                    {/* Protected routes */}
+                    {/* Protected */}
                     <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                     <Route path="/practice" element={<ProtectedRoute><Practice /></ProtectedRoute>} />
                     <Route path="/interview" element={<ProtectedRoute><InterviewMode /></ProtectedRoute>} />
@@ -57,10 +71,10 @@ export default function App() {
                     <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
 
                     {/* Fallback */}
-                    <Route path="*" element={<Navigate to="/login" replace />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+
                 </Routes>
             </BrowserRouter>
         </AuthProvider>
     );
 }
-

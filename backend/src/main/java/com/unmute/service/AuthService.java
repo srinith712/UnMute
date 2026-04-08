@@ -1,18 +1,20 @@
 package com.unmute.service;
-
+import org.springframework.security.core.AuthenticationException;
 import com.unmute.dto.AuthResponse;
 import com.unmute.dto.LoginRequest;
 import com.unmute.dto.RegisterRequest;
 import com.unmute.model.User;
 import com.unmute.repository.UserRepository;
 import com.unmute.security.JwtUtils;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.authentication.BadCredentialsException;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +25,14 @@ public class AuthService {
     private final JwtUtils jwtUtils;
     private final AuthenticationManager authenticationManager;
 
+    /* ─── Register ───────────────────────────────────────── */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email already registered: " + request.getEmail());
+            throw new IllegalArgumentException(
+                    "Email already registered: " + request.getEmail()
+            );
         }
 
         User user = User.builder()
@@ -39,27 +45,48 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
+
         String token = jwtUtils.generateToken(user.getEmail());
+
         return AuthResponse.of(token, user);
     }
 
+    /* ─── Login ─────────────────────────────────────────── */
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+
+        Authentication authentication;
+
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()
+                    )
+            );
+        } catch (AuthenticationException e) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
 
         String email = authentication.getName();
+
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BadCredentialsException("User not found"));
+                .orElseThrow(() ->
+                        new BadCredentialsException("User not found")
+                );
 
         String token = jwtUtils.generateToken(email);
+
         return AuthResponse.of(token, user);
     }
 
+    /* ─── Get Current User ──────────────────────────────── */
     @Transactional(readOnly = true)
     public User getCurrentUser(String email) {
+
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("User not found: " + email));
+                .orElseThrow(() ->
+                        new IllegalArgumentException("User not found: " + email)
+                );
     }
 }

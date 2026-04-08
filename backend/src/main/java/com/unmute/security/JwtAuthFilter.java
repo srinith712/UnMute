@@ -4,18 +4,24 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * JWT Authentication Filter
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -25,38 +31,80 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final UserDetailsServiceImpl userDetailsService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        String path = request.getRequestURI();
+
+        // 🔥 IMPORTANT: Skip JWT for public endpoints
+        if (isPublicEndpoint(path)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
-            String token = parseJwt(request);
-            if (token != null) {
+            String token = extractToken(request);
+
+            if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
                 String email = jwtUtils.extractEmail(token);
-                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-                if (jwtUtils.validateToken(token, userDetails)) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                if (email != null) {
+                    UserDetails userDetails =
+                            userDetailsService.loadUserByUsername(email);
+
+                    if (jwtUtils.validateToken(token, userDetails)) {
+
+                        UsernamePasswordAuthenticationToken auth =
+                                new UsernamePasswordAuthenticationToken(
+                                        userDetails,
+                                        null,
+                                        userDetails.getAuthorities()
+                                );
+
+                        auth.setDetails(
+                                new WebAuthenticationDetailsSource().buildDetails(request)
+                        );
+
+                        SecurityContextHolder.getContext().setAuthentication(auth);
+                    }
                 }
             }
+
         } catch (Exception e) {
-            log.error("Cannot set user authentication: {}", e.getMessage());
+            log.error("JWT authentication failed", e);
         }
+
         filterChain.doFilter(request, response);
     }
 
-    private String parseJwt(HttpServletRequest request) {
-        // Check Authorization header first
-        String headerAuth = request.getHeader("Authorization");
-        if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
-            return headerAuth.substring(7);
+    /* ── Public Endpoint Check ───────────────── */
+    private boolean isPublicEndpoint(String path) {
+        return path.startsWith("/auth") ||
+               path.startsWith("/ws") ||
+               path.startsWith("/dashboard") ||      // 🔥 FIX
+               path.startsWith("/api/dashboard");    // 🔥 FIX
+    }
+
+    /* ── Extract Token ───────────────── */
+    private String extractToken(HttpServletRequest request) {
+
+        String header = request.getHeader("Authorization");
+
+        if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
+            return header.substring(7);
         }
-        // Also check query param for WebSocket connections
-        String tokenParam = request.getParameter("token");
-        if (StringUtils.hasText(tokenParam)) {
-            return tokenParam;
+
+        // WebSocket support
+        String paramToken = request.getParameter("token");
+
+        if (StringUtils.hasText(paramToken)) {
+            return paramToken;
         }
+
         return null;
     }
 }

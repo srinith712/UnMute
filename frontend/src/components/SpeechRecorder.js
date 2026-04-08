@@ -1,213 +1,247 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
-/* ── Helper: format seconds ──────────────────────────────────── */
-function fmtTime(sec) {
+/* ── Format time mm:ss ───────────────────────── */
+function formatTime(sec) {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
     const s = (sec % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
 }
 
-/* ── Waveform bars (visual feedback while recording) ─────────── */
-function WaveformBars({ active }) {
-    const heights = [12, 20, 28, 36, 28, 20, 12, 20, 28, 20, 12, 28, 36, 20, 12];
-    return (
-        <div className="flex items-end gap-0.5 h-10">
-            {heights.map((h, i) => (
-                <div
-                    key={i}
-                    className="wave-bar w-1"
-                    style={{
-                        height: active ? `${h}px` : '6px',
-                        animationDelay: active ? `${i * 0.07}s` : '0s',
-                        animationPlayState: active ? 'running' : 'paused',
-                        transition: 'height 0.3s ease',
-                    }}
-                />
-            ))}
-        </div>
-    );
-}
-
 /**
  * SpeechRecorder
+ *
  * Props:
- *   onRecordingComplete(blob, durationSec) – called when recording stops
- *   maxDuration – seconds (default 120)
- *   disabled    – disable controls
+ *   onRecordingComplete(blob, durationSec, transcript) — called when recording stops
+ *   maxDuration  — max recording seconds (default 120)
+ *   disabled     — disables the button
  */
 export default function SpeechRecorder({
     onRecordingComplete,
     maxDuration = 120,
     disabled = false,
 }) {
-    const [status, setStatus] = useState('idle'); // idle | recording | processing
+    const [recording, setRecording] = useState(false);
     const [elapsed, setElapsed] = useState(0);
     const [error, setError] = useState(null);
-    const [hasBlob, setHasBlob] = useState(false);
+    const [liveTranscript, setLiveTranscript] = useState('');
+    const [speechSupported, setSpeechSupported] = useState(true);
 
-    const mediaRecorderRef = useRef(null);
-    const chunksRef = useRef([]);
-    const timerRef = useRef(null);
-    const blobRef = useRef(null);
-    const streamRef = useRef(null);
-    const elapsedRef = useRef(0);
+    /* ── Refs ───────────────────────── */
+    const mediaRecorderRef   = useRef(null);
+    const chunksRef          = useRef([]);
+    const timerRef           = useRef(null);
+    const streamRef          = useRef(null);
+    const recognitionRef     = useRef(null);
+    const transcriptRef      = useRef('');   // always holds the latest full transcript
+    const elapsedRef         = useRef(0);    // mirror of elapsed for use inside onstop
 
-    const stopTimer = useCallback(() => {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
+    /* Keep elapsedRef in sync */
+    useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+
+    /* ── Check Web Speech API support ───────────────────────── */
+    useEffect(() => {
+        const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setSpeechSupported(false);
+        }
     }, []);
 
-    const stopRecording = useCallback(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
-            mediaRecorderRef.current.stop();
-        }
-        stopTimer();
-    }, [stopTimer]);
-
-    const startTimer = useCallback(() => {
-        elapsedRef.current = 0;
-        setElapsed(0);
-        timerRef.current = setInterval(() => {
-            elapsedRef.current += 1;
-            setElapsed(elapsedRef.current);
-            if (elapsedRef.current >= maxDuration) {
-                stopRecording();
-            }
-        }, 1000);
-    }, [maxDuration, stopRecording]);
-
-    const startRecording = useCallback(async () => {
+    /* ── Start Recording ───────────────────────── */
+    const startRecording = async () => {
         setError(null);
-        setHasBlob(false);
-        chunksRef.current = [];
+        chunksRef.current    = [];
+        transcriptRef.current = '';
+        setLiveTranscript('');
+        setElapsed(0);
+        elapsedRef.current = 0;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            /* 1. Microphone stream */
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
 
-            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                ? 'audio/webm;codecs=opus'
-                : 'audio/webm';
+            /* 2. MediaRecorder (for audio blob) */
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
 
-            const mr = new MediaRecorder(stream, { mimeType });
-            mediaRecorderRef.current = mr;
-
-            mr.ondataavailable = (e) => {
+            recorder.ondataavailable = (e) => {
                 if (e.data.size > 0) chunksRef.current.push(e.data);
             };
 
-            mr.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: mimeType });
-                blobRef.current = blob;
-                streamRef.current?.getTracks().forEach(t => t.stop());
-                streamRef.current = null;
-                setStatus('idle');
-                setHasBlob(true);
+            recorder.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                stream.getTracks().forEach(t => t.stop());
+
                 if (onRecordingComplete) {
-                    onRecordingComplete(blob, elapsedRef.current);
+                    onRecordingComplete(
+                        blob,
+                        elapsedRef.current,
+                        transcriptRef.current.trim()
+                    );
                 }
             };
 
-            mr.start(250);
-            setStatus('recording');
-            startTimer();
-        } catch (err) {
-            if (err.name === 'NotAllowedError') {
-                setError('Microphone access denied. Please allow microphone permissions.');
-            } else {
-                setError('Could not access microphone. Please check your device settings.');
-            }
-        }
-    }, [onRecordingComplete, startTimer]);
+            recorder.start();
 
+            /* 3. Web Speech API (live transcript) */
+            const SpeechRecognition =
+                window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognitionRef.current = recognition;
+
+                recognition.lang            = 'en-US';
+                recognition.continuous      = true;
+                recognition.interimResults  = true;
+
+                let finalTranscript = '';
+
+                recognition.onresult = (event) => {
+                    let interim = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const chunk = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += chunk + ' ';
+                        } else {
+                            interim += chunk;
+                        }
+                    }
+
+                    const displayed = finalTranscript + interim;
+                    transcriptRef.current = finalTranscript + interim;
+                    setLiveTranscript(displayed);
+                };
+
+                recognition.onerror = (e) => {
+                    /* network / aborted errors are non-fatal during recording */
+                    if (e.error !== 'aborted' && e.error !== 'no-speech') {
+                        console.warn('SpeechRecognition error:', e.error);
+                    }
+                };
+
+                recognition.start();
+            }
+
+            /* 4. Timer */
+            setRecording(true);
+            timerRef.current = setInterval(() => {
+                setElapsed(prev => {
+                    const next = prev + 1;
+                    elapsedRef.current = next;
+                    if (next >= maxDuration) {
+                        stopRecording();
+                        return prev;
+                    }
+                    return next;
+                });
+            }, 1000);
+
+        } catch (err) {
+            setError('Microphone access denied or not available.');
+            console.error(err);
+        }
+    };
+
+    /* ── Stop Recording ───────────────────────── */
+    const stopRecording = useCallback(() => {
+        /* Stop speech recognition first */
+        try { recognitionRef.current?.stop(); } catch (_) {}
+
+        /* Stop media recorder */
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+
+        clearInterval(timerRef.current);
+        setRecording(false);
+    }, []);
+
+    /* ── Cleanup on unmount ───────────────────────── */
     useEffect(() => {
         return () => {
-            stopTimer();
+            clearInterval(timerRef.current);
             streamRef.current?.getTracks().forEach(t => t.stop());
+            try { recognitionRef.current?.stop(); } catch (_) {}
         };
-    }, [stopTimer]);
+    }, []);
 
-    const isRecording = status === 'recording';
-    const progressPct = (elapsed / maxDuration) * 100;
-    const timeRemaining = maxDuration - elapsed;
+    const progress = (elapsed / maxDuration) * 100;
 
     return (
-        <div className="flex flex-col items-center gap-6 py-6">
-            {/* Waveform / idle indicator */}
-            <div className="relative flex flex-col items-center gap-3">
-                <WaveformBars active={isRecording} />
+        <div className="flex flex-col items-center gap-4 p-4">
 
-                {/* Big record button */}
-                <button
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={disabled || status === 'processing'}
-                    className={`
-            relative w-20 h-20 rounded-full flex items-center justify-center
-            transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2
-            focus:ring-offset-cream-100 disabled:opacity-50 disabled:cursor-not-allowed
-            ${isRecording
-                            ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_30px_rgba(239,68,68,0.4)] focus:ring-red-300'
-                            : 'bg-gradient-to-br from-orange-500 to-peach-300 hover:from-orange-600 hover:to-peach-400 shadow-orange focus:ring-orange-300 animate-glow'
-                        }
-          `}
-                    aria-label={isRecording ? 'Stop recording' : 'Start recording'}
-                >
-                    {isRecording ? (
-                        /* Stop square */
-                        <span className="w-7 h-7 rounded-md bg-white" />
-                    ) : (
-                        /* Microphone icon */
-                        <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round"
-                                d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                            <path strokeLinecap="round" strokeLinejoin="round"
-                                d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
-                        </svg>
-                    )}
-                </button>
-            </div>
+            {/* Record Button */}
+            <button
+                id="speech-recorder-btn"
+                onClick={recording ? stopRecording : startRecording}
+                disabled={disabled}
+                className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl
+                    transition-all duration-200 shadow-md
+                    ${disabled
+                        ? 'bg-gray-300 cursor-not-allowed'
+                        : recording
+                            ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                            : 'bg-orange-500 hover:bg-orange-600'
+                    }`}
+                aria-label={recording ? 'Stop recording' : 'Start recording'}
+            >
+                {recording ? '■' : '🎤'}
+            </button>
 
-            {/* Status label */}
+            {/* Status */}
             <div className="text-center">
-                {isRecording ? (
+                {recording ? (
                     <>
-                        <p className="text-red-500 font-bold text-sm animate-pulse">🔴 Recording…</p>
-                        <p className="text-ink-400 text-xs mt-0.5">
-                            {fmtTime(elapsed)} / {fmtTime(maxDuration)}
-                            &nbsp;·&nbsp;{fmtTime(timeRemaining)} remaining
+                        <p className="text-red-500 font-semibold">● Recording...</p>
+                        <p className="text-sm text-gray-500">
+                            {formatTime(elapsed)} / {formatTime(maxDuration)}
                         </p>
                     </>
-                ) : hasBlob ? (
-                    <p className="text-mint-500 text-sm font-bold">✅ Recording complete — Analysis in progress…</p>
                 ) : (
-                    <p className="text-ink-400 text-sm">
-                        {disabled ? 'Recording disabled' : 'Press the mic to start recording'}
+                    <p className="text-gray-500 text-sm">
+                        {disabled ? 'Select a topic first' : 'Click to start recording'}
                     </p>
                 )}
             </div>
 
-            {/* Progress bar (only while recording) */}
-            {isRecording && (
-                <div className="w-full max-w-xs xp-bar-track">
+            {/* Progress Bar */}
+            {recording && (
+                <div className="w-full max-w-xs bg-gray-200 h-2 rounded overflow-hidden">
                     <div
-                        className="h-full rounded-full transition-all duration-1000"
-                        style={{
-                            width: `${progressPct}%`,
-                            background: timeRemaining < 15
-                                ? 'linear-gradient(90deg,#ef4444,#FF8070)'
-                                : 'linear-gradient(90deg,#FF8C42,#FFB7A5)'
-                        }}
+                        className="h-2 bg-orange-500 rounded transition-all duration-1000"
+                        style={{ width: `${progress}%` }}
                     />
+                </div>
+            )}
+
+            {/* Live Transcript Box */}
+            {recording && (
+                <div className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-lg p-3 min-h-[80px]">
+                    <p className="text-xs text-gray-400 font-semibold mb-1 uppercase tracking-wide">
+                        Live Transcript
+                    </p>
+                    {liveTranscript ? (
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                            {liveTranscript}
+                        </p>
+                    ) : (
+                        <p className="text-sm text-gray-400 italic">
+                            {speechSupported
+                                ? 'Start speaking — transcript appears here...'
+                                : 'Speech-to-text not supported in this browser'}
+                        </p>
+                    )}
                 </div>
             )}
 
             {/* Error */}
             {error && (
-                <div className="w-full max-w-xs px-4 py-3 rounded-2xl bg-red-50 border-2 border-red-200">
-                    <p className="text-red-500 text-sm text-center">{error}</p>
-                </div>
+                <p className="text-red-500 text-sm text-center">{error}</p>
             )}
+
         </div>
     );
 }

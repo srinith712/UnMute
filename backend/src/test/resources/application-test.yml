@@ -1,19 +1,22 @@
-# Test profile – uses H2 in-memory database so no Postgres is required
 spring:
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: sa
-    password:
+    password: ""
+
   jpa:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
     database-platform: org.hibernate.dialect.H2Dialect
-  autoconfigure:
-    exclude: []
 
+  h2:
+    console:
+      enabled: true
+
+# JWT (test only)
 app:
   jwt:
     secret: TestSecretKeyForUnmuteApplicationTestsOnly123456789ABCDEF
-    expiration-ms: 3600000
+    expiration: 3600000
