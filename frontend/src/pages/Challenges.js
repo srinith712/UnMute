@@ -78,9 +78,11 @@ function ChallengeCard({ challenge, onSelect }) {
 /* ── Challenge Arena ───────────────────────── */
 function ChallengeArena({ challenge, onBack }) {
     const [scores, setScores] = useState(null);
+    const [feedback, setFeedback] = useState('');
+    const [tips, setTips] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    const handleRecordingComplete = async (blob, duration) => {
+    const handleRecordingComplete = async (blob, duration, transcript) => {
         if (!blob) return;
 
         setLoading(true);
@@ -89,11 +91,14 @@ function ChallengeArena({ challenge, onBack }) {
             const form = new FormData();
             form.append('audio', blob);
             form.append('duration', duration);
+            form.append('transcript', transcript || '');
 
-            const res = await api.post(`/api/challenges/${challenge.id}`, form);
+            const res = await api.post(`/challenges/${challenge.id}/submit`, form);
 
             const data = res?.data || {};
             setScores(data.scores || null);
+            setFeedback(data.feedback || '');
+            setTips(data.improvementTips || []);
 
         } catch (err) {
             console.error("Error:", err);
@@ -131,7 +136,12 @@ function ChallengeArena({ challenge, onBack }) {
                 maxDuration={challenge.durationSeconds}
             />
 
-            <ScoreCard scores={scores} loading={loading} />
+            <ScoreCard 
+                scores={scores} 
+                feedback={feedback} 
+                improvementTips={tips} 
+                loading={loading} 
+            />
 
         </div>
     );

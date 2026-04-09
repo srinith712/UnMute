@@ -59,29 +59,26 @@ public class InterviewController {
     public ResponseEntity<Map<String, Object>> evaluateAnswer(
             Authentication auth,
             @RequestParam("audio") MultipartFile audio,
-            @RequestParam(value = "questionId", defaultValue = "0") String questionId
+            @RequestParam(value = "questionId", defaultValue = "0") String questionId,
+            @RequestParam(value = "transcript", defaultValue = "") String transcript,
+            @RequestParam(value = "duration", defaultValue = "0") int duration
     ) {
 
-        /* Auth safety */
-        if (auth == null || auth.getName() == null) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("error", "Unauthorized"));
-        }
+        /* Use real user if authenticated, else demo */
+        String email = (auth != null && auth.getName() != null)
+                ? auth.getName()
+                : "demo@unmute.app";
 
-        SpeechResult result = speechService.analyzeAndSave(
-                auth.getName(),
-                audio,
-                "{\"questionId\":\"" + questionId + "\"}"
+        /* Call real NLP analysis using the frontend transcript */
+        SpeechResult result = speechService.analyzeTranscript(
+                email,
+                transcript,
+                "interview",
+                duration
         );
 
-        Map<String, Object> response = new LinkedHashMap<>();
+        Map<String, Object> response = new LinkedHashMap<>(speechService.mapResult(result));
         response.put("questionId", questionId);
-        response.put("overallScore", result.getOverallScore());
-        response.put("fluencyScore", result.getFluencyScore());
-        response.put("grammarScore", result.getGrammarScore());
-        response.put("confidenceScore", result.getConfidenceScore());
-        response.put("fillerWords", result.getFillerWords());
-        response.put("feedback", generateFeedback(result));
 
         return ResponseEntity.ok(response);
     }
@@ -103,10 +100,8 @@ public class InterviewController {
                 history.stream()
                         .limit(10)
                         .map(r -> {
-                            Map<String, Object> m = new LinkedHashMap<>();
-                            m.put("id", r.getId());
-                            m.put("overallScore", r.getOverallScore());
-                            m.put("analyzedAt", r.getAnalyzedAt());
+                            Map<String, Object> m = new LinkedHashMap<>(speechService.mapResult(r));
+                            // Override ID if you want, but mapResult already puts it
                             return m;
                         })
                         .collect(Collectors.toList());
@@ -114,19 +109,4 @@ public class InterviewController {
         return ResponseEntity.ok(response);
     }
 
-    /* ── Feedback Logic ──────────────────── */
-    private String generateFeedback(SpeechResult r) {
-
-        double score = r.getOverallScore();
-
-        if (score >= 85) {
-            return "Excellent! Your answer was clear and confident.";
-        } else if (score >= 70) {
-            return "Good job! Try reducing filler words.";
-        } else if (score >= 55) {
-            return "Decent attempt. Improve fluency and grammar.";
-        } else {
-            return "Keep practicing! Speak slowly and clearly.";
-        }
-    }
 }

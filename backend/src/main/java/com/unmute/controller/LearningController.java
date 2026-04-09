@@ -16,7 +16,7 @@ import java.util.Map;
  * Handles learning videos and completion tracking
  */
 @RestController
-@RequestMapping("/api/learning")
+@RequestMapping("/learning")
 @RequiredArgsConstructor
 @CrossOrigin(
         origins = {

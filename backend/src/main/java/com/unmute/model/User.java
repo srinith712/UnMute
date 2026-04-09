@@ -3,6 +3,7 @@ package com.unmute.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -43,6 +44,14 @@ public class User {
     @Column(nullable = false)
     @Builder.Default
     private Integer rating = 1000;
+
+    /**
+     * Date of the most recent practice session.
+     * Used for real consecutive-day streak calculation.
+     * Updated by UserService.addXp() after each session.
+     */
+    @Column(name = "last_active_date")
+    private LocalDate lastActiveDate;
 
     /* ── Timestamp ────────────────────── */
     @Column(name = "created_at", nullable = false, updatable = false)

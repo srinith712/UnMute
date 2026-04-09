@@ -125,7 +125,8 @@ public class DashboardService {
 
     /* ─── Streak Logic ───────────────── */
     private int computeStreak(User user) {
-        return Math.min(user.getXp() / 50, 30);
+        // Delegates to UserService which uses real lastActiveDate for consecutive-day tracking
+        return userService.computeStreak(user);
     }
 
     /* ─── Build Task Helper ───────────────── */

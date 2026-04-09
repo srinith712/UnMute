@@ -79,7 +79,7 @@ export default function Practice() {
             }
 
             /* ── PRIMARY: transcript-based NLP ── */
-            const res = await practiceAPI.analyzeTranscript(transcript, topicId);
+            const res = await practiceAPI.analyzeTranscript(transcript, topicId, duration);
 
             setScores(res.data?.scores);
             setFeedback(res.data?.feedback || '');
@@ -220,9 +220,18 @@ export default function Practice() {
                                                 key={h.id || i}
                                                 className="flex justify-between items-center border-b pb-2 last:border-0"
                                             >
-                                                <span className="text-sm text-gray-600">
-                                                    {h.topic || 'Freestyle'}
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm text-gray-700 font-medium capitalize">
+                                                        {h.topic
+                                                            ? h.topic.replace(/-/g, ' ')
+                                                            : 'Freestyle'}
+                                                    </span>
+                                                    {h.wordCount > 0 && (
+                                                        <span className="text-xs text-gray-400">
+                                                            {h.wordCount} words
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span className="badge badge-purple">
                                                     {h.scores?.overall
                                                         ? `${Math.round(h.scores.overall)}/100`

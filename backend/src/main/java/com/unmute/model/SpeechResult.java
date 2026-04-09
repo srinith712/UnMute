@@ -31,6 +31,14 @@ public class SpeechResult {
     @Column(name = "input_text", columnDefinition = "TEXT")
     private String inputText;
 
+    /** Practice topic (self-intro, interview, debate, etc.) */
+    @Column(name = "topic")
+    private String topic;
+
+    /** Word count of the analyzed transcript */
+    @Column(name = "word_count")
+    private Integer wordCount;
+
     /* ── Scores ───────────────────────── */
     @Column(name = "fluency_score")
     private Double fluencyScore;

@@ -28,6 +28,7 @@ export default function InterviewMode() {
 
     const [scores, setScores] = useState(null);
     const [feedback, setFeedback] = useState('');
+    const [tips, setTips] = useState([]);
     const [loading, setLoading] = useState(false);
     const [answered, setAnswered] = useState([]);
 
@@ -51,18 +52,20 @@ export default function InterviewMode() {
     const currentQ = questions[qIndex];
 
     /* ── Submit Recording ───────────────── */
-    const handleRecordingComplete = async (blob, duration) => {
+    const handleRecordingComplete = async (blob, duration, transcript) => {
         setLoading(true);
         setScores(null);
 
         try {
-            const res = await interviewAPI.submitAnswer(qIndex, blob);
+            const res = await interviewAPI.submitAnswer(qIndex, blob, transcript, duration);
             setScores(res.data?.scores);
             setFeedback(res.data?.feedback);
+            setTips(res.data?.improvementTips || []);
         } catch {
             const demo = generateDemoAnalysis(duration, 'interview', 60);
             setScores(demo.scores);
             setFeedback(demo.feedback);
+            setTips(demo.improvementTips || []);
         }
 
         setAnswered(prev => [...new Set([...prev, qIndex])]);
@@ -134,10 +137,10 @@ export default function InterviewMode() {
                         maxDuration={120}
                     />
 
-                    {/* Score */}
                     <ScoreCard
                         scores={scores}
                         feedback={feedback}
+                        improvementTips={tips}
                         loading={loading}
                     />
 

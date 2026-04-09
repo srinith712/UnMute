@@ -1,5 +1,6 @@
 package com.unmute.controller;
 
+import com.unmute.model.SpeechResult;
 import com.unmute.service.SpeechService;
 import com.unmute.service.UserService;
 
@@ -17,7 +18,7 @@ import java.util.*;
  * Handles challenge list and submissions
  */
 @RestController
-@RequestMapping("/api/challenges")
+@RequestMapping("/challenges")
 @RequiredArgsConstructor
 @CrossOrigin(
         origins = {
@@ -106,14 +107,14 @@ public class ChallengeController {
             Authentication auth,
             @PathVariable String challengeId,
             @RequestParam("audio") MultipartFile audio,
-            @RequestParam(value = "metadata", required = false, defaultValue = "{}") String metadata
+            @RequestParam(value = "transcript", defaultValue = "") String transcript,
+            @RequestParam(value = "duration", defaultValue = "0") int duration
     ) {
 
-        /* Validate user */
-        if (auth == null || auth.getName() == null) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("error", "Unauthorized"));
-        }
+        /* Use real user if authenticated, else demo */
+        String email = (auth != null && auth.getName() != null)
+                ? auth.getName()
+                : "demo@unmute.app";
 
         /* Get XP reward */
         int xpReward = CHALLENGES.stream()
@@ -122,15 +123,18 @@ public class ChallengeController {
                 .findFirst()
                 .orElse(50);
 
-        /* Analyze speech */
-        var result = speechService.analyzeAndSave(
-                auth.getName(),
-                audio,
-                metadata
+        /* Call real NLP analysis using the frontend transcript */
+        SpeechResult result = speechService.analyzeTranscript(
+                email,
+                transcript,
+                "challenge",
+                duration
         );
 
-        /* Add extra XP */
-        userService.addXp(auth.getName(), xpReward / 2);
+        /* Add extra XP if real user */
+        if (auth != null && auth.getName() != null) {
+            userService.addXp(auth.getName(), xpReward / 2);
+        }
 
         /* Random encouragement */
         String[] messages = {
@@ -144,18 +148,9 @@ public class ChallengeController {
         String encouragement = messages[new Random().nextInt(messages.length)];
 
         /* Build response */
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("scores", Map.of(
-                "overall", result.getOverallScore(),
-                "fluency", result.getFluencyScore(),
-                "grammar", result.getGrammarScore(),
-                "vocabulary", result.getVocabularyScore(),
-                "pronunciation", result.getPronunciationScore(),
-                "confidence", result.getConfidenceScore()
-        ));
+        Map<String, Object> response = new LinkedHashMap<>(speechService.mapResult(result));
         response.put("xpAwarded", xpReward);
         response.put("encouragement", encouragement);
-        response.put("improvementTips", result.getImprovementTips());
 
         return ResponseEntity.ok(response);
     }

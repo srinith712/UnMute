@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/gd")
+@RequestMapping("/gd")
 @RequiredArgsConstructor
 public class GDController {
 

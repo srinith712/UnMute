@@ -1,10 +1,25 @@
 import axios from 'axios';
 
 /* ── Base URL ───────────────────────── */
-const BASE_URL =
-    process.env.REACT_APP_API_URL || 'http://localhost:8080';
+let BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+if (BASE_URL.endsWith('/api')) {
+    BASE_URL = BASE_URL.slice(0, -4);
+}
 
 const api = axios.create({
+    baseURL: BASE_URL,
+    timeout: 30000,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
+/**
+ * publicApi — no Authorization header.
+ * Use for endpoints that must work without a login (demo mode).
+ * Prevents stale tokens from causing 403s on public routes.
+ */
+const publicApi = axios.create({
     baseURL: BASE_URL,
     timeout: 30000,
     headers: {
@@ -65,10 +80,17 @@ export const practiceAPI = {
 
     /**
      * PRIMARY: Send transcript text for NLP analysis.
-     * No auth required — works for demo users.
+     * Uses publicApi (no auth header) so a stale token never causes a 403.
+     * @param transcript  Raw speech text from Web Speech API
+     * @param topic       Practice topic id
+     * @param durationSeconds Actual recording duration for real WPM calculation
      */
-    analyzeTranscript: (transcript, topic = 'freestyle') =>
-        api.post('/practice/analyze-text', { transcript, topic }),
+    analyzeTranscript: (transcript, topic = 'freestyle', durationSeconds = 0) =>
+        publicApi.post('/practice/analyze-text', {
+            transcript,
+            topic,
+            durationSeconds: String(durationSeconds),
+        }),
 
     /**
      * LEGACY: Upload audio blob (requires real JWT auth).
@@ -91,10 +113,12 @@ export const interviewAPI = {
     getQuestions: (category) =>
         api.get(`/interview/questions?category=${category}`),
 
-    submitAnswer: (id, blob) => {
+    submitAnswer: (id, blob, transcript = '', duration = 0) => {
         const form = new FormData();
         form.append('audio', blob);
         form.append('questionId', id);
+        form.append('transcript', transcript);
+        form.append('duration', duration);
 
         return api.post('/interview/evaluate', form, {
             headers: { 'Content-Type': 'multipart/form-data' },

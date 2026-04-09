@@ -173,6 +173,24 @@ export default function SpeechRecorder({
     return (
         <div className="flex flex-col items-center gap-4 p-4">
 
+            {/* ─ Browser Compatibility Warning ────────────────────── */}
+            {!speechSupported && (
+                <div className="w-full max-w-md bg-amber-50 border border-amber-300
+                                rounded-lg p-3 flex items-start gap-2">
+                    <span className="text-amber-500 text-lg leading-tight">⚠️</span>
+                    <div>
+                        <p className="text-sm font-semibold text-amber-700">
+                            Live transcript not available in this browser
+                        </p>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                            For best results, use <strong>Chrome</strong> or <strong>Edge</strong>.
+                            Firefox does not support the Web Speech API.
+                            Recording still works, but no transcript will be generated.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Record Button */}
             <button
                 id="speech-recorder-btn"

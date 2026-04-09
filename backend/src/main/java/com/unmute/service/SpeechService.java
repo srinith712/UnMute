@@ -12,7 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Slf4j
 @Service
@@ -57,8 +61,17 @@ public class SpeechService {
     );
 
     /* ─── Transcript-Based NLP Analysis (PRIMARY) ──────────────── */
+
+    /**
+     * Primary analysis path.
+     * @param email       User email (or demo email for unauthenticated users)
+     * @param transcript  Raw speech transcript from Web Speech API
+     * @param topic       Practice topic (self-intro, interview, etc.)
+     * @param durationSec Actual recording duration in seconds (0 if unknown)
+     */
     @Transactional
-    public SpeechResult analyzeTranscript(String email, String transcript, String topic) {
+    public SpeechResult analyzeTranscript(
+            String email, String transcript, String topic, int durationSec) {
 
         User user = userService.getByEmail(email);
 
@@ -77,6 +90,8 @@ public class SpeechService {
             SpeechResult result = SpeechResult.builder()
                     .user(user)
                     .inputText(transcript)
+                    .topic(topic != null ? topic : "freestyle")
+                    .wordCount(wordCount)
                     .fluencyScore(20.0)
                     .grammarScore(20.0)
                     .vocabularyScore(20.0)
@@ -112,30 +127,57 @@ public class SpeechService {
 
         /*
          * ── Word count factor (0.0 → 1.0) ──
-         * Acts as a global multiplier so short speeches cannot score high.
-         * Factor reaches 1.0 at 50+ words (reasonable minimum for a good response).
+         * Global multiplier — short speeches cannot score artificially high.
+         * Factor reaches 1.0 at 50+ words (reasonable minimum for a meaningful response).
          */
         double wordFactor = Math.min(1.0, wordCount / 50.0);
 
-        /* ── Fluency: word count vs expected pace (~150 wpm for 60s = 150 words) ── */
-        double rawFluency = scoreFromWordCount(wordCount);
-        double fluency    = clampScore(rawFluency * wordFactor);
+        /*
+         * ── Fluency: Real WPM if duration is known, otherwise use word count ──
+         * Target: 120–150 wpm is natural conversational pace.
+         * If durationSec > 0: compute actual WPM and score it.
+         * If durationSec == 0 (unknown): fall back to word count heuristic.
+         */
+        double rawFluency;
+        if (durationSec > 0) {
+            double wpm = (wordCount / (double) durationSec) * 60.0;
+            rawFluency = scoreFromWpm(wpm);
+            log.debug("Real WPM: wordCount={} durationSec={} wpm={}", wordCount, durationSec, wpm);
+        } else {
+            rawFluency = scoreFromWordCount(wordCount);
+        }
+        double fluency = clampScore(rawFluency * wordFactor);
 
-        /* ── Grammar: filler ratio penalty, also penalized by short speech ── */
+        /*
+         * ── Speech Clarity Score (stored as grammarScore) ──
+         * Measures how filler-free and clean the speech is.
+         * Note: This is NOT a full grammar check — it uses filler word ratio
+         * as a proxy for speech clarity and verbal discipline.
+         * For full grammar checking, integrate LanguageTool (see improvement notes).
+         */
         double fillerRatio = (double) fillerCount / wordCount;
-        double rawGrammar  = 85.0 - (fillerRatio * 250.0);  // base 85, not 95
+        double rawGrammar  = 85.0 - (fillerRatio * 250.0);
         double grammar     = clampScore(rawGrammar * wordFactor);
 
-        /* ── Vocabulary: unique word diversity, requires enough words to be meaningful ── */
+        /* ── Vocabulary: unique word diversity (Type-Token Ratio) ── */
         double rawVocab = scoreVocabulary(words, wordCount);
         double vocabulary = clampScore(rawVocab * wordFactor);
 
-        /* ── Confidence: words per sentence, penalized for not speaking enough ── */
+        /*
+         * ── Confidence: Sentence structure complexity ──
+         * Measures average words per sentence as a proxy for structured delivery.
+         * Higher = more organized, complex sentences (correlated with confidence).
+         */
         double avgWordsPerSentence = (double) wordCount / sentenceCount;
         double rawConfidence = 45.0 + (avgWordsPerSentence * 1.8);
         double confidence    = clampScore(rawConfidence * wordFactor);
 
-        /* ── Pronunciation: estimated from fluency + grammar (no audio = approximation) ── */
+        /*
+         * ── Pronunciation: Text-based estimated score ──
+         * No audio processing is performed — this is an approximation based on
+         * fluency + clarity. For real pronunciation scoring, integrate
+         * OpenAI Whisper or CMU Pronouncing Dictionary.
+         */
         double pronunciation = clampScore(((fluency * 0.5) + (grammar * 0.5)) * wordFactor);
 
         /* ── Overall (weighted) ── */
@@ -149,11 +191,13 @@ public class SpeechService {
 
         /* ── Build Tips ── */
         String tips = buildTranscriptTips(fluency, grammar, vocabulary,
-                confidence, fillerCount, wordCount, topic);
+                confidence, fillerCount, wordCount, durationSec, topic);
 
         SpeechResult result = SpeechResult.builder()
                 .user(user)
                 .inputText(transcript)
+                .topic(topic != null ? topic : "freestyle")
+                .wordCount(wordCount)
                 .fluencyScore(round2(fluency))
                 .grammarScore(round2(grammar))
                 .vocabularyScore(round2(vocabulary))
@@ -169,66 +213,73 @@ public class SpeechService {
         int xpGained = (int) (overall / 10);
         userService.addXp(email, xpGained);
 
-        log.info("Transcript analyzed: user={} words={} fillers={} score={}",
-                email, wordCount, fillerCount, overall);
+        log.info("Transcript analyzed: user={} topic={} words={} wpm={} fillers={} score={}",
+                email, topic, wordCount,
+                durationSec > 0 ? String.format("%.0f", (wordCount / (double) durationSec) * 60) : "N/A",
+                fillerCount, overall);
 
         return saved;
     }
 
+    /**
+     * Convenience overload — used when duration is not known (0 = fallback to word-count heuristic).
+     */
+    @Transactional
+    public SpeechResult analyzeTranscript(String email, String transcript, String topic) {
+        return analyzeTranscript(email, transcript, topic, 0);
+    }
+
     /* ─── Audio-Based Analysis (Legacy / Authenticated users) ──── */
+    /**
+     * @deprecated Audio upload path. Previously returned random scores — now fixed.
+     * Routes through the NLP pipeline using metadataJson as a placeholder transcript.
+     * For real audio-to-text, integrate OpenAI Whisper or Google Speech-to-Text and
+     * pass the resulting transcript to analyzeTranscript().
+     */
     @Transactional
     public SpeechResult analyzeAndSave(String email, MultipartFile audio, String metadataJson) {
+        // Route through the real NLP pipeline instead of generating random scores.
+        // Audio processing (STT) is not yet implemented — the metadata is used as a
+        // placeholder. When Whisper is integrated, replace metadataJson with the
+        // real transcript extracted from the audio file.
+        String placeholder = (metadataJson != null && !metadataJson.isBlank() && !metadataJson.equals("{}"))
+                ? metadataJson
+                : "Audio session submitted for analysis.";
 
-        User user = userService.getByEmail(email);
-        Random rng = new Random();
+        log.info("Audio upload path (STT not yet implemented): user={} audioSize={} bytes",
+                email, audio != null ? audio.getSize() : 0);
 
-        double fluency       = randomScore(rng, 60, 35);
-        double grammar       = randomScore(rng, 55, 40);
-        double vocabulary    = randomScore(rng, 55, 40);
-        double pronunciation = randomScore(rng, 50, 45);
-        double confidence    = randomScore(rng, 50, 45);
-        int fillers = rng.nextInt(8);
-
-        double overall = (
-                fluency * 0.25 + grammar * 0.20 + vocabulary * 0.15 +
-                pronunciation * 0.20 + confidence * 0.20
-        );
-
-        String tips = buildImprovementTips(fluency, grammar, vocabulary,
-                pronunciation, confidence, fillers);
-
-        SpeechResult result = SpeechResult.builder()
-                .user(user)
-                .inputText(metadataJson)
-                .fluencyScore(round2(fluency))
-                .grammarScore(round2(grammar))
-                .vocabularyScore(round2(vocabulary))
-                .pronunciationScore(round2(pronunciation))
-                .confidenceScore(round2(confidence))
-                .fillerWords(fillers)
-                .overallScore(round2(overall))
-                .improvementTips(tips)
-                .build();
-
-        SpeechResult saved = speechResultRepository.save(result);
-        userService.addXp(email, (int) (overall / 10));
-
-        log.info("Audio analyzed: user={} score={}", email, overall);
-        return saved;
+        return analyzeTranscript(email, placeholder, "audio-upload", 0);
     }
 
     /* ─── Scoring Helpers ──────────────────────────────────────── */
 
     /**
-     * Fluency based on word count.
+     * Fluency from actual WPM (words per minute).
+     * Used when recording duration is known.
+     * Natural conversational English: 120–150 WPM.
+     * Fast (may be rushed): 150–180 WPM.
+     */
+    private double scoreFromWpm(double wpm) {
+        if (wpm <= 0)    return 0;
+        if (wpm < 60)    return wpm * 0.4;              // too slow → 0–24
+        if (wpm < 100)   return 24 + (wpm - 60) * 1.2;  // slow → 24–72
+        if (wpm < 130)   return 72 + (wpm - 100) * 0.8; // near target → 72–96
+        if (wpm < 160)   return 96 + (wpm - 130) * 0.1; // on target → 96–99
+        if (wpm < 200)   return 95 - (wpm - 160) * 0.5; // too fast → penalty
+        return 75; // extreme speed penalty
+    }
+
+    /**
+     * Fluency from word count alone (fallback when duration is unknown).
      * Target: 150 words/min for a 60s session.
      * Score rises gradually; short speeches score low.
      */
     private double scoreFromWordCount(int wordCount) {
         if (wordCount == 0)   return 0;
-        if (wordCount < 10)   return wordCount * 3.0;         // 0–30
-        if (wordCount < 30)   return 30 + (wordCount - 10) * 1.5; // 30–60
-        if (wordCount < 80)   return 60 + (wordCount - 30) * 0.6; // 60–90
+        if (wordCount < 10)   return wordCount * 3.0;          // 0–30
+        if (wordCount < 30)   return 30 + (wordCount - 10) * 1.5;  // 30–60
+        if (wordCount < 80)   return 60 + (wordCount - 30) * 0.6;  // 60–90
         if (wordCount < 150)  return 90 + (wordCount - 80) * 0.07; // 90–95
         return 95;
     }
@@ -252,7 +303,8 @@ public class SpeechService {
     /* ─── Transcript-Specific Tips ─────────────────────────────── */
     private String buildTranscriptTips(
             double fluency, double grammar, double vocabulary,
-            double confidence, int fillerCount, int wordCount, String topic
+            double confidence, int fillerCount, int wordCount,
+            int durationSec, String topic
     ) {
         List<String> tips = new ArrayList<>();
 
@@ -263,23 +315,43 @@ public class SpeechService {
             tips.add("Reduce filler words (" + fillerCount +
                     " detected: 'um', 'uh', 'like'). Use deliberate pauses instead.");
 
+        if (fillerCount == 0 && wordCount >= 30)
+            tips.add("Excellent! Zero filler words detected — your speech clarity is great.");
+
         if (fluency < 55)
             tips.add("Improve fluency: try reading aloud daily. Aim for 120–150 words per minute.");
 
+        /* If we have real duration, give specific WPM feedback */
+        if (durationSec > 5) {
+            double wpm = (wordCount / (double) durationSec) * 60.0;
+            if (wpm < 80)
+                tips.add(String.format("Your pace was %.0f words/min — try speaking a bit faster (target: 120–150 wpm).", wpm));
+            else if (wpm > 180)
+                tips.add(String.format("Your pace was %.0f words/min — slow down a little for better clarity (target: 120–150 wpm).", wpm));
+            else
+                tips.add(String.format("Good speaking pace: %.0f words/min ✓", wpm));
+        }
+
         if (grammar < 55)
-            tips.add("Work on grammar: speak in complete sentences and avoid filler-heavy phrases.");
+            tips.add("Work on speech clarity: speak in complete sentences and avoid filler-heavy phrases.");
 
         if (vocabulary < 55)
-            tips.add("Expand your vocabulary diversity — try using different words instead of repeating.");
+            tips.add("Expand your vocabulary: try using different words instead of repeating the same ones.");
 
         if (confidence < 55)
-            tips.add("Sound more confident: speak in longer, structured sentences.");
+            tips.add("Sound more structured: use longer, well-formed sentences for better confidence scoring.");
 
         if ("interview".equalsIgnoreCase(topic))
             tips.add("Use the STAR method: Situation, Task, Action, Result.");
 
         if ("self-intro".equalsIgnoreCase(topic) || "self_intro".equalsIgnoreCase(topic))
             tips.add("Structure: Present role → Key achievement → Future goal.");
+
+        if ("debate".equalsIgnoreCase(topic))
+            tips.add("Use connectors: 'However', 'On the other hand', 'In contrast' to sound more persuasive.");
+
+        if ("storytelling".equalsIgnoreCase(topic))
+            tips.add("Use vivid language and vary your sentence length to keep the listener engaged.");
 
         if (tips.isEmpty())
             tips.add("Great performance! Keep practicing for consistency.");
@@ -326,11 +398,71 @@ public class SpeechService {
     }
 
     /* ─── Helpers ─────────────────────────────────── */
-    private double randomScore(Random rng, double base, double range) {
-        return base + rng.nextDouble() * range;
-    }
-
     private double round2(double val) {
         return Math.round(val * 100.0) / 100.0;
+    }
+
+    /* ── Helper: Map SpeechResult → JSON ───────────────────── */
+    public Map<String, Object> mapResult(SpeechResult result) {
+        Map<String, Object> response = new LinkedHashMap<>();
+
+        response.put("id", result.getId());
+
+        /* Topic and word count — stored per session */
+        response.put("topic",     result.getTopic() != null ? result.getTopic() : "freestyle");
+        response.put("wordCount", result.getWordCount() != null ? result.getWordCount() : 0);
+
+        /* Scores */
+        Map<String, Object> scores = new LinkedHashMap<>();
+        scores.put("overall",       result.getOverallScore());
+        scores.put("fluency",       result.getFluencyScore());
+        scores.put("grammar",       result.getGrammarScore());
+        scores.put("vocabulary",    result.getVocabularyScore());
+        scores.put("pronunciation", result.getPronunciationScore());
+        scores.put("confidence",    result.getConfidenceScore());
+        response.put("scores", scores);
+
+        /* Filler info */
+        response.put("fillerWords", result.getFillerWords());
+
+        /* Tips (pipe-separated → array) */
+        String rawTips = result.getImprovementTips();
+        if (rawTips != null && !rawTips.isBlank()) {
+            response.put("improvementTips", Arrays.asList(rawTips.split("\\|")));
+        } else {
+            response.put("improvementTips", new ArrayList<>());
+        }
+
+        /* Generate formatted reply feedback */
+        response.put("feedback", generateFeedbackText(result));
+
+        response.put("analyzedAt", result.getAnalyzedAt());
+
+        return response;
+    }
+
+    private String generateFeedbackText(SpeechResult r) {
+        double score = r.getOverallScore();
+        String topic = r.getTopic() != null ? r.getTopic().toLowerCase() : "";
+
+        if (r.getWordCount() != null && r.getWordCount() < 10) {
+            return "This seems too short for a full analysis. Please speak a bit more!";
+        }
+
+        if (topic.contains("self-intro") || topic.contains("self_intro")) {
+            if (score >= 85) return "Thank you for the introduction! Your background was presented very clearly and confidently. Great first impression.";
+            if (score >= 70) return "Thanks for introducing yourself. Good effort, but try to reduce filler words to sound more fluent.";
+            if (score >= 55) return "Thank you for the intro. Your structure is okay, but focusing on fluency and clarity will help make a stronger impression.";
+            return "Thanks for sharing. For a self-introduction, it's best to speak more slowly and clearly. Keep practicing!";
+        } else if (topic.contains("storytelling")) {
+            if (score >= 80) return "Great story! Your pacing and delivery kept it very engaging.";
+            if (score >= 60) return "Nice story, but pay attention to your pacing and reduce hesitations.";
+            return "Keep practicing your storytelling. Use pauses effectively to make it more engaging.";
+        } else {
+            if (score >= 85) return "Excellent delivery! Your speech was clear and confident.";
+            if (score >= 70) return "Good job! Try reducing your filler words for a tighter delivery.";
+            if (score >= 55) return "Decent attempt. Focus on improving your fluency and grammar.";
+            return "Keep practicing! Take a deep breath and speak slowly and clearly.";
+        }
     }
 }

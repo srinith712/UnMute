@@ -13,6 +13,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -32,12 +33,26 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
 
+    /**
+     * Completely ignore these paths in Spring Security.
+     * No JWT filter, no CORS filter, no authorization check — direct to controller.
+     * CORS for these paths is handled by @CrossOrigin on PracticeController.
+     */
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return web -> web.ignoring().requestMatchers(
+                "/practice/analyze-text",
+                "/practice/topics"
+        );
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
+            .headers(headers -> headers.frameOptions(frame -> frame.disable()))
 
             .sessionManagement(sm ->
                 sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
@@ -54,9 +69,11 @@ public class SecurityConfig {
                         "/ws/**",
                         "/dashboard/**",
                         "/api/dashboard/**",
-                        "/practice/analyze-text", // ✅ transcript NLP — demo-friendly
-                        "/practice/topics",       // ✅ public
-                        "/practice/history"       // ✅ returns empty for unauthenticated
+                        "/h2-console/**",           // ✅ H2 browser console
+                        "/practice/analyze-text",   // ✅ transcript NLP — demo-friendly
+                        "/practice/topics",         // ✅ public
+                        "/practice/history",        // ✅ returns empty for unauthenticated
+                        "/error"                    // ✅ prevents 404s from returning 403s
                 ).permitAll()
 
                 .anyRequest().authenticated()

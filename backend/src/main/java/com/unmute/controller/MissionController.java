@@ -15,7 +15,7 @@ import java.util.*;
  * Handles daily missions and completion
  */
 @RestController
-@RequestMapping("/api/missions")
+@RequestMapping("/missions")
 @RequiredArgsConstructor
 @CrossOrigin(
         origins = {

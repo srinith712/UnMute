@@ -83,10 +83,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     /* ── Public Endpoint Check ───────────────── */
     private boolean isPublicEndpoint(String path) {
-        return path.startsWith("/auth") ||
-               path.startsWith("/ws") ||
-               path.startsWith("/dashboard") ||      // 🔥 FIX
-               path.startsWith("/api/dashboard");    // 🔥 FIX
+        return path.startsWith("/auth")            ||
+               path.startsWith("/ws")              ||
+               path.startsWith("/dashboard")       ||
+               path.startsWith("/api/dashboard")   ||
+               path.startsWith("/h2-console")      ||
+               // Practice public routes (must match SecurityConfig permitAll)
+               path.equals("/practice/analyze-text") ||
+               path.equals("/practice/topics")        ||
+               path.equals("/practice/history");
     }
 
     /* ── Extract Token ───────────────── */

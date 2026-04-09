@@ -49,6 +49,15 @@ public class PracticeController {
         String transcript = body.getOrDefault("transcript", "").trim();
         String topic      = body.getOrDefault("topic", "freestyle");
 
+        /* Parse optional duration (sent by frontend for real WPM calculation) */
+        int durationSec = 0;
+        try {
+            String dur = body.get("durationSeconds");
+            if (dur != null && !dur.isBlank()) {
+                durationSec = Integer.parseInt(dur);
+            }
+        } catch (NumberFormatException ignored) {}
+
         if (transcript.isEmpty()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Transcript is required"));
@@ -59,9 +68,9 @@ public class PracticeController {
                 ? auth.getName()
                 : DEMO_EMAIL;
 
-        SpeechResult result = speechService.analyzeTranscript(email, transcript, topic);
+        SpeechResult result = speechService.analyzeTranscript(email, transcript, topic, durationSec);
 
-        return ResponseEntity.ok(mapResult(result));
+        return ResponseEntity.ok(speechService.mapResult(result));
     }
 
     /* ─────────────────────────────────────────────────────────────
@@ -83,7 +92,7 @@ public class PracticeController {
                 auth.getName(), audio, metadata
         );
 
-        return ResponseEntity.ok(mapResult(result));
+        return ResponseEntity.ok(speechService.mapResult(result));
     }
 
     /* ── Get Topics ─────────────────────────────────────────── */
@@ -105,47 +114,10 @@ public class PracticeController {
 
         List<Map<String, Object>> response =
                 history.stream()
-                        .map(this::mapResult)
+                        .map(speechService::mapResult)
                         .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
     }
 
-    /* ── Helper: Map SpeechResult → JSON ───────────────────── */
-    private Map<String, Object> mapResult(SpeechResult result) {
-
-        Map<String, Object> response = new LinkedHashMap<>();
-
-        response.put("id", result.getId());
-
-        /* Scores */
-        Map<String, Object> scores = new LinkedHashMap<>();
-        scores.put("overall",      result.getOverallScore());
-        scores.put("fluency",      result.getFluencyScore());
-        scores.put("grammar",      result.getGrammarScore());
-        scores.put("vocabulary",   result.getVocabularyScore());
-        scores.put("pronunciation", result.getPronunciationScore());
-        scores.put("confidence",   result.getConfidenceScore());
-        response.put("scores", scores);
-
-        /* Filler info */
-        response.put("fillerWords", result.getFillerWords());
-
-        /* Tips (pipe-separated → array) */
-        String rawTips = result.getImprovementTips();
-        List<String> tips = (rawTips != null && !rawTips.isBlank())
-                ? Arrays.asList(rawTips.split("\\|"))
-                : List.of();
-        response.put("improvementTips", tips);
-
-        /* Short feedback = first tip */
-        String feedback = (!tips.isEmpty())
-                ? tips.get(0)
-                : "Great session! Keep practicing.";
-        response.put("feedback", feedback);
-
-        response.put("analyzedAt", result.getAnalyzedAt());
-
-        return response;
-    }
 }
