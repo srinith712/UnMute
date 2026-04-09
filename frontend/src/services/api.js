@@ -113,15 +113,11 @@ export const interviewAPI = {
     getQuestions: (category) =>
         api.get(`/interview/questions?category=${category}`),
 
-    submitAnswer: (id, blob, transcript = '', duration = 0) => {
-        const form = new FormData();
-        form.append('audio', blob);
-        form.append('questionId', id);
-        form.append('transcript', transcript);
-        form.append('duration', duration);
-
-        return api.post('/interview/evaluate', form, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+    submitAnswer: (id, transcript = '', duration = 0) => {
+        return api.post('/interview/evaluate', {
+            questionId: id,
+            transcript: transcript,
+            duration: String(duration)
         });
     },
 };

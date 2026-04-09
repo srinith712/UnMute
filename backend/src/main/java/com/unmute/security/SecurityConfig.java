@@ -73,6 +73,8 @@ public class SecurityConfig {
                         "/practice/analyze-text",   // ✅ transcript NLP — demo-friendly
                         "/practice/topics",         // ✅ public
                         "/practice/history",        // ✅ returns empty for unauthenticated
+                        "/interview/**",            // ✅ demo-friendly eval
+                        "/challenges/**",           // ✅ demo-friendly submissions
                         "/error"                    // ✅ prevents 404s from returning 403s
                 ).permitAll()
 

@@ -165,7 +165,7 @@ export default function Dashboard() {
                             icon="⭐"
                             label="Rating"
                             value={loadingStats ? '…' : displayRating}
-                            sub="out of 5"
+                            sub="Skill Points"
                             color="blue"
                         />
                         <StatCard

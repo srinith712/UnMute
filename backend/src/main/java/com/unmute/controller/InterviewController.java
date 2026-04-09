@@ -55,14 +55,14 @@ public class InterviewController {
     }
 
     /* ── Evaluate Answer ─────────────────── */
-    @PostMapping(value = "/evaluate", consumes = "multipart/form-data")
+    @PostMapping(value = "/evaluate")
     public ResponseEntity<Map<String, Object>> evaluateAnswer(
             Authentication auth,
-            @RequestParam("audio") MultipartFile audio,
-            @RequestParam(value = "questionId", defaultValue = "0") String questionId,
-            @RequestParam(value = "transcript", defaultValue = "") String transcript,
-            @RequestParam(value = "duration", defaultValue = "0") int duration
+            @RequestBody Map<String, String> request
     ) {
+        String questionId = request.getOrDefault("questionId", "0");
+        String transcript = request.getOrDefault("transcript", "");
+        int duration = Integer.parseInt(request.getOrDefault("duration", "0"));
 
         /* Use real user if authenticated, else demo */
         String email = (auth != null && auth.getName() != null)

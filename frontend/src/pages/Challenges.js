@@ -88,12 +88,12 @@ function ChallengeArena({ challenge, onBack }) {
         setLoading(true);
 
         try {
-            const form = new FormData();
-            form.append('audio', blob);
-            form.append('duration', duration);
-            form.append('transcript', transcript || '');
+            const payload = {
+                transcript: transcript || '',
+                duration: String(duration)
+            };
 
-            const res = await api.post(`/challenges/${challenge.id}/submit`, form);
+            const res = await api.post(`/challenges/${challenge.id}/submit`, payload);
 
             const data = res?.data || {};
             setScores(data.scores || null);

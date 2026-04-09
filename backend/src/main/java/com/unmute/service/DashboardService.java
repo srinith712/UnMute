@@ -103,15 +103,12 @@ public class DashboardService {
         List<SpeechResult> recent = speechResultRepository
                 .findRecentByUser(user, PageRequest.of(0, 7));
 
-        return recent.stream().map(r -> {
+        List<Map<String, Object>> mapped = recent.stream().map(r -> {
 
             Map<String, Object> point = new LinkedHashMap<>();
 
-            point.put("date",
-                    r.getAnalyzedAt()
-                            .getDayOfWeek()
-                            .getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-            );
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm");
+            point.put("date", r.getAnalyzedAt().format(formatter));
 
             point.put("fluency", r.getFluencyScore());
             point.put("grammar", r.getGrammarScore());
@@ -121,6 +118,9 @@ public class DashboardService {
             return point;
 
         }).collect(Collectors.toList());
+
+        Collections.reverse(mapped);
+        return mapped;
     }
 
     /* ─── Streak Logic ───────────────── */

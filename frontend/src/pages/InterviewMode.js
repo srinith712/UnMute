@@ -57,7 +57,7 @@ export default function InterviewMode() {
         setScores(null);
 
         try {
-            const res = await interviewAPI.submitAnswer(qIndex, blob, transcript, duration);
+            const res = await interviewAPI.submitAnswer(qIndex, transcript, duration);
             setScores(res.data?.scores);
             setFeedback(res.data?.feedback);
             setTips(res.data?.improvementTips || []);

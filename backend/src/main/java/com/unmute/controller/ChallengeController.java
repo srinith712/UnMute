@@ -102,14 +102,14 @@ public class ChallengeController {
     }
 
     /* ── Submit Challenge ─────────────────────── */
-    @PostMapping(value = "/{challengeId}/submit", consumes = "multipart/form-data")
+    @PostMapping(value = "/{challengeId}/submit")
     public ResponseEntity<Map<String, Object>> submitChallenge(
             Authentication auth,
             @PathVariable String challengeId,
-            @RequestParam("audio") MultipartFile audio,
-            @RequestParam(value = "transcript", defaultValue = "") String transcript,
-            @RequestParam(value = "duration", defaultValue = "0") int duration
+            @RequestBody Map<String, String> request
     ) {
+        String transcript = request.getOrDefault("transcript", "");
+        int duration = Integer.parseInt(request.getOrDefault("duration", "0"));
 
         /* Use real user if authenticated, else demo */
         String email = (auth != null && auth.getName() != null)
