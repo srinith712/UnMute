@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 /* ── Base URL ───────────────────────── */
-let BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+let BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8080';
 if (BASE_URL.endsWith('/api')) {
     BASE_URL = BASE_URL.slice(0, -4);
 }
