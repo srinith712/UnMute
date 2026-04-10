@@ -61,8 +61,25 @@ public class UserService {
         user.setXp(newXp);
         user.setLevel(newLevel);
 
-        // ── Stamp today's activity date for streak tracking ──
-        user.setLastActiveDate(LocalDate.now());
+        // ── Real Streak Tracking ──
+        LocalDate today = LocalDate.now();
+        LocalDate lastActive = user.getLastActiveDate();
+        
+        if (lastActive == null) {
+            user.setStreakCount(1);
+        } else {
+            long daysSince = today.toEpochDay() - lastActive.toEpochDay();
+            if (daysSince == 1) {
+                // Next consecutive day
+                user.setStreakCount(user.getStreakCount() != null ? user.getStreakCount() + 1 : 2);
+            } else if (daysSince > 1) {
+                // Streak broken, reset
+                user.setStreakCount(1);
+            }
+            // If daysSince == 0, they already earned streak today, do nothing.
+        }
+
+        user.setLastActiveDate(today);
 
         // ── Update rating: +1 per session (simple ELO-lite) ──
         user.setRating(user.getRating() + 1);
@@ -95,9 +112,10 @@ public class UserService {
             return 0;
         }
 
-        // Active today or yesterday — streak is alive
-        // Cap at 30 days; scale from XP so it grows naturally
-        return Math.min(user.getXp() / 50 + 1, 30);
+        // For legacy users who just had the column added, streakCount might be 0
+        // but if they were active yesterday or today, their streak is at LEAST 1.
+        int currentStreak = user.getStreakCount() != null ? user.getStreakCount() : 0;
+        return Math.max(currentStreak, 1);
     }
 
     /* ─── Leaderboard ─────────────────────────────── */

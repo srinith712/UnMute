@@ -5,6 +5,7 @@ import com.unmute.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -55,6 +56,7 @@ public class DashboardController {
     /* ── Complete Task ───────────────── */
     @PostMapping("/tasks/{taskId}/complete")
     public ResponseEntity<Map<String, Object>> completeTask(
+            Authentication auth,
             @PathVariable String taskId
     ) {
 
@@ -65,11 +67,12 @@ public class DashboardController {
                     .body(Map.of("error", "Invalid task"));
         }
 
-        int xpEarned = 50;
+        String email = (auth != null && auth.getName() != null) ? auth.getName() : DEMO_EMAIL;
+        int xpEarned = dashboardService.completeDailyTask(email, taskId);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("taskId", taskId);
-        response.put("completed", true);
+        response.put("completed", xpEarned > 0);
         response.put("xpEarned", xpEarned);
         response.put("date", today);
 

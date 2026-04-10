@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import SpeechRecorder from '../components/SpeechRecorder';
 import ScoreCard from '../components/ScoreCard';
-import api from '../services/api';
+import api, { dashboardAPI } from '../services/api';
 
 /* ── Challenges Data ───────────────────────── */
 const CHALLENGES = [
@@ -81,13 +81,29 @@ function ChallengeArena({ challenge, onBack }) {
     const [feedback, setFeedback] = useState('');
     const [tips, setTips] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [warning, setWarning] = useState('');
 
     const handleRecordingComplete = async (blob, duration, transcript) => {
         if (!blob) return;
 
         setLoading(true);
+        setScores(null);
+        setFeedback('');
+        setTips([]);
+        setWarning('');
+
+        const wordCount = transcript ? transcript.trim().split(/\s+/).filter(Boolean).length : 0;
 
         try {
+            if (wordCount < 5) {
+                setWarning(
+                    wordCount === 0
+                        ? '⚠️ No speech detected. Make sure your microphone is working and you spoke clearly.'
+                        : `⚠️ Too short (${wordCount} word${wordCount !== 1 ? 's' : ''} detected). Speak for at least 15–20 seconds for accurate analysis.`
+                );
+                setLoading(false);
+                return;
+            }
             const payload = {
                 transcript: transcript || '',
                 duration: String(duration)
@@ -99,6 +115,16 @@ function ChallengeArena({ challenge, onBack }) {
             setScores(data.scores || null);
             setFeedback(data.feedback || '');
             setTips(data.improvementTips || []);
+
+            /* ── AUTO-COMPLETE DAILY TASK ── */
+            if (duration >= 5) {
+                const today = new Date().toISOString().split('T')[0];
+                const taskId = sessionStorage.getItem('todayTaskId');
+                if (taskId) {
+                    localStorage.setItem('dailyTask', JSON.stringify({ taskId: String(taskId), date: today }));
+                    dashboardAPI.completeTask(taskId).catch(console.info);
+                }
+            }
 
         } catch (err) {
             console.error("Error:", err);
@@ -135,6 +161,12 @@ function ChallengeArena({ challenge, onBack }) {
                 onRecordingComplete={handleRecordingComplete}
                 maxDuration={challenge.durationSeconds}
             />
+
+            {warning && (
+                <div className="mb-4 p-3 bg-red-50 text-red-600 border border-red-200 rounded-md text-sm">
+                    {warning}
+                </div>
+            )}
 
             <ScoreCard 
                 scores={scores} 

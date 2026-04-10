@@ -60,6 +60,22 @@ public class SpeechService {
             "What is dependency injection?"
     );
 
+    private static final List<String> INTERVIEW_QUESTIONS_BEHAVIORAL = List.of(
+            "Tell me about a challenge you faced and how you overcame it",
+            "Give an example of a time you showed leadership",
+            "Describe a time you disagreed with a colleague or manager",
+            "How do you handle working with a difficult team member?",
+            "Tell me about a time you failed and what you learned"
+    );
+
+    private static final List<String> INTERVIEW_QUESTIONS_SITUATIONAL = List.of(
+            "How do you prioritize multiple tight deadlines?",
+            "What would you do if you realized you made a mistake on a project?",
+            "How would you handle a client who is unhappy with your work?",
+            "If you have competing urgent tasks, how do you manage your time?",
+            "How do you adapt to sudden changes in a project's requirements?"
+    );
+
     /* ─── Transcript-Based NLP Analysis (PRIMARY) ──────────────── */
 
     /**
@@ -236,6 +252,7 @@ public class SpeechService {
      * For real audio-to-text, integrate OpenAI Whisper or Google Speech-to-Text and
      * pass the resulting transcript to analyzeTranscript().
      */
+    @Deprecated
     @Transactional
     public SpeechResult analyzeAndSave(String email, MultipartFile audio, String metadataJson) {
         // Route through the real NLP pipeline instead of generating random scores.
@@ -392,9 +409,14 @@ public class SpeechService {
     public List<String> getPracticeTopics() { return PRACTICE_TOPICS; }
 
     public List<String> getInterviewQuestions(String category) {
-        return "tech".equalsIgnoreCase(category)
-                ? INTERVIEW_QUESTIONS_TECH
-                : INTERVIEW_QUESTIONS_HR;
+        if ("technical".equalsIgnoreCase(category) || "tech".equalsIgnoreCase(category)) {
+            return INTERVIEW_QUESTIONS_TECH;
+        } else if ("behavioral".equalsIgnoreCase(category)) {
+            return INTERVIEW_QUESTIONS_BEHAVIORAL;
+        } else if ("situational".equalsIgnoreCase(category)) {
+            return INTERVIEW_QUESTIONS_SITUATIONAL;
+        }
+        return INTERVIEW_QUESTIONS_HR;
     }
 
     /* ─── Helpers ─────────────────────────────────── */

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'; // ✅ FIXED
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
+import { dashboardAPI } from '../services/api';
 
 /* ── Categories ───────────────── */
 const CATEGORIES = ['All', 'Interview Tips', 'Body Language', 'Voice & Tone'];
@@ -128,6 +129,14 @@ export default function LearningHub() {
     const handleComplete = (id) => {
         if (!completed.includes(id)) {
             setCompleted(prev => [...prev, id]);
+        }
+
+        /* ── AUTO-COMPLETE DAILY TASK ── */
+        const today = new Date().toISOString().split('T')[0];
+        const taskId = sessionStorage.getItem('todayTaskId');
+        if (taskId) {
+            localStorage.setItem('dailyTask', JSON.stringify({ taskId: String(taskId), date: today }));
+            dashboardAPI.completeTask(taskId).catch(console.info);
         }
     };
 

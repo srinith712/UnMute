@@ -57,11 +57,16 @@ export default function PersonalityModule() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [tab, setTab] = useState('posture');
     const [answers, setAnswers] = useState([]);
+    const [qIndex, setQIndex] = useState(0);
 
     const handleAnswer = (index, value) => {
         const newAns = [...answers];
         newAns[index] = value;
         setAnswers(newAns);
+        
+        if (index < QUESTIONS.length - 1) {
+            setQIndex(index + 1);
+        }
     };
 
     const score = answers.reduce((a, b) => a + (b || 0), 0);
@@ -137,25 +142,46 @@ export default function PersonalityModule() {
                     )}
 
                     {tab === 'quiz' && (
-                        <div>
-                            {QUESTIONS.map((q, i) => (
-                                <div key={i} className="mb-3">
-                                    <p>{q}</p>
-                                    {[0, 1, 2, 3].map(val => (
-                                        <button
-                                            key={val}
-                                            onClick={() => handleAnswer(i, val)}
-                                            className="border px-2 py-1 m-1"
-                                        >
-                                            {val}
-                                        </button>
-                                    ))}
-                                </div>
-                            ))}
-
-                            <div className="mt-4">
-                                <p>Score: {percentage}%</p>
+                        <div className="max-w-xl border rounded p-6 bg-white shadow-sm">
+                            <p className="text-sm text-gray-500 mb-2">Question {qIndex + 1} of {QUESTIONS.length}</p>
+                            <h3 className="text-xl font-medium mb-6">{QUESTIONS[qIndex]}</h3>
+                            
+                            <div className="flex gap-2">
+                                {[0, 1, 2, 3].map(val => (
+                                    <button
+                                        key={val}
+                                        onClick={() => handleAnswer(qIndex, val)}
+                                        className={`flex-1 border px-2 py-3 rounded text-lg font-medium hover:bg-blue-50 transition-colors
+                                            ${answers[qIndex] === val ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-50 text-gray-700'}`}
+                                    >
+                                        {val}
+                                    </button>
+                                ))}
                             </div>
+                            
+                            <div className="flex justify-between mt-8">
+                                <button 
+                                    onClick={() => setQIndex(prev => Math.max(0, prev - 1))}
+                                    disabled={qIndex === 0}
+                                    className="px-4 py-2 border rounded disabled:opacity-50 text-sm bg-white hover:bg-gray-50 text-gray-700 font-medium"
+                                >
+                                    Previous
+                                </button>
+                                <button 
+                                    onClick={() => setQIndex(prev => Math.min(QUESTIONS.length - 1, prev + 1))}
+                                    disabled={qIndex === QUESTIONS.length - 1}
+                                    className="px-4 py-2 border rounded disabled:opacity-50 text-sm bg-white hover:bg-gray-50 text-gray-700 font-medium"
+                                >
+                                    Next
+                                </button>
+                            </div>
+
+                            {answers.filter(a => a !== undefined).length === QUESTIONS.length && (
+                                <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+                                    <p className="text-lg font-bold text-green-800">Quiz Completed!</p>
+                                    <p className="text-2xl mt-2 font-medium text-gray-800">Score: {percentage}%</p>
+                                </div>
+                            )}
                         </div>
                     )}
 

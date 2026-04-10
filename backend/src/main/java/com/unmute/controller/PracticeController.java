@@ -78,6 +78,7 @@ public class PracticeController {
      * LEGACY path — audio blob, requires real JWT.
      * ──────────────────────────────────────────────────────────── */
     @PostMapping(value = "/analyze", consumes = "multipart/form-data")
+    @SuppressWarnings("deprecation")
     public ResponseEntity<Map<String, Object>> analyzeAudio(
             Authentication auth,
             @RequestParam("audio") MultipartFile audio,

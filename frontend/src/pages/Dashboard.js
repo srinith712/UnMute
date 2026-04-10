@@ -33,7 +33,7 @@ function StatCard({ icon, label, value, sub, color = 'purple' }) {
 /* ── Dashboard ───────────────────────── */
 export default function Dashboard() {
 
-    const { user } = useAuth();
+    const { user, updateUser } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [task,    setTask]    = useState(null);
@@ -97,10 +97,19 @@ export default function Dashboard() {
     /* ── Fetch stats ───────────────────────── */
     useEffect(() => {
         dashboardAPI.getStats()
-            .then(res  => setStats(res.data))
+            .then(res  => {
+                setStats(res.data);
+                if (res.data) {
+                    updateUser({
+                        xp: res.data.xp,
+                        level: res.data.level,
+                        rating: res.data.rating
+                    });
+                }
+            })
             .catch(() => setStats(null))
             .finally(() => setLoadingStats(false));
-    }, []);
+    }, [updateUser]);
 
     /* ── Fetch progress chart ───────────────────────── */
     useEffect(() => {

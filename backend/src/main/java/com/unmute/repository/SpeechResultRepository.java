@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -38,5 +39,12 @@ public interface SpeechResultRepository extends JpaRepository<SpeechResult, Long
     List<SpeechResult> findRecentByUser(
             @Param("user") User user,
             Pageable pageable
+    );
+
+    /* ── Date Range Results ───────────── */
+    @Query("SELECT s FROM SpeechResult s WHERE s.user = :user AND s.analyzedAt >= :startDate")
+    List<SpeechResult> findByUserAndAnalyzedAtAfter(
+            @Param("user") User user,
+            @Param("startDate") LocalDateTime startDate
     );
 }

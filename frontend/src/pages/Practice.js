@@ -3,7 +3,7 @@ import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import SpeechRecorder from '../components/SpeechRecorder';
 import ScoreCard from '../components/ScoreCard';
-import { practiceAPI } from '../services/api';
+import { practiceAPI, dashboardAPI } from '../services/api';
 
 /* ── Topics ───────────────────────── */
 const TOPICS = [
@@ -21,13 +21,16 @@ const TOPICS = [
  * This ensures localStorage always stores the correct task ID.
  */
 function getTodayTaskId() {
+    const stored = sessionStorage.getItem('todayTaskId');
+    if (stored) return stored;
+
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
     const diff = now - start;
     const oneDay = 1000 * 60 * 60 * 24;
     const dayOfYear = Math.floor(diff / oneDay); // 1-based
-    const index = dayOfYear % 8;                 // 0-based, matches backend
-    return String(index + 1);                    // "1"–"8"
+    const index = dayOfYear % 7;                 // 0-based, matches backend 7 tasks
+    return String(index + 1);                    // "1"–"7"
 }
 
 export default function Practice() {
@@ -75,7 +78,8 @@ export default function Practice() {
                         ? '⚠️ No speech detected. Make sure your microphone is working and you spoke clearly.'
                         : `⚠️ Too short (${wordCount} word${wordCount !== 1 ? 's' : ''} detected). Speak for at least 15–20 seconds for accurate analysis.`
                 );
-                return; // finally still runs — setLoading(false) is there
+                setLoading(false);
+                return;
             }
 
             /* ── PRIMARY: transcript-based NLP ── */
@@ -85,6 +89,20 @@ export default function Practice() {
             setFeedback(res.data?.feedback || '');
             setTips(res.data?.improvementTips || []);
             setFillerCount(res.data?.fillerWords ?? null);
+
+            /* ── AUTO-COMPLETE DAILY TASK ── */
+            if (duration >= 5) {
+                const today = new Date().toISOString().split('T')[0];
+                const taskId = getTodayTaskId();
+
+                localStorage.setItem('dailyTask', JSON.stringify({
+                    taskId,
+                    date: today,
+                }));
+                dashboardAPI.completeTask(taskId).catch(console.info);
+
+                console.log(`✅ Daily task auto-completed: taskId=${taskId}, date=${today}`);
+            }
 
         } catch (err) {
             /* Show the actual error for easier debugging */
@@ -107,19 +125,6 @@ export default function Practice() {
 
         } finally {
             setLoading(false);
-
-            /* ── AUTO-COMPLETE DAILY TASK ── */
-            if (duration >= 30) {
-                const today = new Date().toISOString().split('T')[0];
-                const taskId = getTodayTaskId();
-
-                localStorage.setItem('dailyTask', JSON.stringify({
-                    taskId,
-                    date: today,
-                }));
-
-                console.log(`✅ Daily task auto-completed: taskId=${taskId}, date=${today}`);
-            }
         }
     };
 

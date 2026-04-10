@@ -75,6 +75,8 @@ public class SecurityConfig {
                         "/practice/history",        // ✅ returns empty for unauthenticated
                         "/interview/**",            // ✅ demo-friendly eval
                         "/challenges/**",           // ✅ demo-friendly submissions
+                        "/gd/**",                   // ✅ public group discussion rooms
+                        "/learning/**",             // ✅ demo learning videos
                         "/error"                    // ✅ prevents 404s from returning 403s
                 ).permitAll()
 

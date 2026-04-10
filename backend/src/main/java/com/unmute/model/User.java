@@ -53,6 +53,13 @@ public class User {
     @Column(name = "last_active_date")
     private LocalDate lastActiveDate;
 
+    /**
+     * The current consecutive days the user has been active.
+     */
+    @Column(name = "streak_count", columnDefinition = "integer default 0")
+    @Builder.Default
+    private Integer streakCount = 0;
+
     /* ── Timestamp ────────────────────── */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
