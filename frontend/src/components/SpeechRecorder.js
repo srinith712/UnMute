@@ -27,13 +27,13 @@ export default function SpeechRecorder({
     const [speechSupported, setSpeechSupported] = useState(true);
 
     /* ── Refs ───────────────────────── */
-    const mediaRecorderRef   = useRef(null);
-    const chunksRef          = useRef([]);
-    const timerRef           = useRef(null);
-    const streamRef          = useRef(null);
-    const recognitionRef     = useRef(null);
-    const transcriptRef      = useRef('');   // always holds the latest full transcript
-    const elapsedRef         = useRef(0);    // mirror of elapsed for use inside onstop
+    const mediaRecorderRef = useRef(null);
+    const chunksRef = useRef([]);
+    const timerRef = useRef(null);
+    const streamRef = useRef(null);
+    const recognitionRef = useRef(null);
+    const transcriptRef = useRef('');   // always holds the latest full transcript
+    const elapsedRef = useRef(0);    // mirror of elapsed for use inside onstop
 
     /* Keep elapsedRef in sync */
     useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
@@ -50,7 +50,7 @@ export default function SpeechRecorder({
     /* ── Start Recording ───────────────────────── */
     const startRecording = async () => {
         setError(null);
-        chunksRef.current    = [];
+        chunksRef.current = [];
         transcriptRef.current = '';
         setLiveTranscript('');
         setElapsed(0);
@@ -92,9 +92,9 @@ export default function SpeechRecorder({
                 const recognition = new SpeechRecognition();
                 recognitionRef.current = recognition;
 
-                recognition.lang            = 'en-US';
-                recognition.continuous      = true;
-                recognition.interimResults  = true;
+                recognition.lang = 'en-US';
+                recognition.continuous = true;
+                recognition.interimResults = true;
 
                 let finalTranscript = '';
 
@@ -119,6 +119,16 @@ export default function SpeechRecorder({
                     /* network / aborted errors are non-fatal during recording */
                     if (e.error !== 'aborted' && e.error !== 'no-speech') {
                         console.warn('SpeechRecognition error:', e.error);
+                    }
+                };
+
+                recognition.onend = () => {
+                    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.warn('Could not restart recognition:', e);
+                        }
                     }
                 };
 
@@ -148,7 +158,7 @@ export default function SpeechRecorder({
     /* ── Stop Recording ───────────────────────── */
     const stopRecording = useCallback(() => {
         /* Stop speech recognition first */
-        try { recognitionRef.current?.stop(); } catch (_) {}
+        try { recognitionRef.current?.stop(); } catch (_) { }
 
         /* Stop media recorder */
         if (mediaRecorderRef.current?.state === 'recording') {
@@ -164,7 +174,7 @@ export default function SpeechRecorder({
         return () => {
             clearInterval(timerRef.current);
             streamRef.current?.getTracks().forEach(t => t.stop());
-            try { recognitionRef.current?.stop(); } catch (_) {}
+            try { recognitionRef.current?.stop(); } catch (_) { }
         };
     }, []);
 

@@ -142,7 +142,7 @@ export default function ScoreCard({
             {/* Feedback */}
             {feedback && (
                 <div className="p-3 bg-gray-50 border rounded">
-                    <p className="text-xs font-semibold mb-1">AI Feedback</p>
+                    <p className="text-xs font-semibold mb-1">Feedback</p>
                     <p className="text-sm text-gray-700">{feedback}</p>
                 </div>
             )}

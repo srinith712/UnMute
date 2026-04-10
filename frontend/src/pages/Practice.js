@@ -7,12 +7,12 @@ import { practiceAPI } from '../services/api';
 
 /* ── Topics ───────────────────────── */
 const TOPICS = [
-    { id: 'self-intro',   label: 'Self Introduction' },
+    { id: 'self-intro', label: 'Self Introduction' },
     { id: 'storytelling', label: 'Storytelling' },
-    { id: 'opinion',      label: 'Opinion' },
-    { id: 'debate',       label: 'Debate' },
-    { id: 'news',         label: 'News Summary' },
-    { id: 'freestyle',    label: 'Freestyle' },
+    { id: 'opinion', label: 'Opinion' },
+    { id: 'debate', label: 'Debate' },
+    { id: 'news', label: 'News Summary' },
+    { id: 'freestyle', label: 'Freestyle' },
 ];
 
 /**
@@ -21,9 +21,9 @@ const TOPICS = [
  * This ensures localStorage always stores the correct task ID.
  */
 function getTodayTaskId() {
-    const now  = new Date();
+    const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
-    const diff  = now - start;
+    const diff = now - start;
     const oneDay = 1000 * 60 * 60 * 24;
     const dayOfYear = Math.floor(diff / oneDay); // 1-based
     const index = dayOfYear % 8;                 // 0-based, matches backend
@@ -32,22 +32,22 @@ function getTodayTaskId() {
 
 export default function Practice() {
 
-    const [sidebarOpen, setSidebarOpen]   = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const [selectedTopic, setSelectedTopic] = useState(null);
-    const [scores, setScores]             = useState(null);
-    const [feedback, setFeedback]         = useState('');
-    const [tips, setTips]                 = useState([]);
-    const [fillerCount, setFillerCount]   = useState(null);
-    const [loading, setLoading]           = useState(false);
-    const [history, setHistory]           = useState([]);
+    const [scores, setScores] = useState(null);
+    const [feedback, setFeedback] = useState('');
+    const [tips, setTips] = useState([]);
+    const [fillerCount, setFillerCount] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [history, setHistory] = useState([]);
     const [lastTranscript, setLastTranscript] = useState('');
-    const [warning, setWarning]               = useState('');
+    const [warning, setWarning] = useState('');
 
     /* ── Load History ───────────────────────── */
     useEffect(() => {
         practiceAPI.getHistory()
             .then(res => setHistory(res.data || []))
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     /* ── Handle Recording Complete ───────────────────────── */
@@ -88,8 +88,8 @@ export default function Practice() {
 
         } catch (err) {
             /* Show the actual error for easier debugging */
-            const status  = err.response?.status;
-            const errMsg  = err.response?.data?.error || err.response?.data?.message || err.message;
+            const status = err.response?.status;
+            const errMsg = err.response?.data?.error || err.response?.data?.message || err.message;
 
             console.error('Analysis error — status:', status, '| message:', errMsg, err);
 
@@ -110,8 +110,8 @@ export default function Practice() {
 
             /* ── AUTO-COMPLETE DAILY TASK ── */
             if (duration >= 30) {
-                const today      = new Date().toISOString().split('T')[0];
-                const taskId     = getTodayTaskId();
+                const today = new Date().toISOString().split('T')[0];
+                const taskId = getTodayTaskId();
 
                 localStorage.setItem('dailyTask', JSON.stringify({
                     taskId,
@@ -136,7 +136,7 @@ export default function Practice() {
 
                     <h2 className="text-xl font-bold mb-1">Speech Practice 🎤</h2>
                     <p className="text-sm text-gray-500 mb-6">
-                        Select a topic, record your speech, and get instant AI feedback.
+                        Select a topic, record your speech, and get instant feedback.
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
